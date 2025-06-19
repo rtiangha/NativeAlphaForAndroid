@@ -26,13 +26,13 @@ android {
     dependenciesInfo {
         includeInApk = false
     }
-    compileSdk 35
+    compileSdk = 35
     splits {
         abi {
-            enable true
+            enable = true
             reset()
             include "armeabi-v7a", "x86", "arm64-v8a", "x86_64"
-            universalApk true
+            universalApk = true
         }
     }
     flavorDimensions "default"
@@ -48,24 +48,25 @@ android {
         }
         standard {
             dimension "default"
-            isDefault true
+            isDefault = true
             resValue "string", "app_name", "Native Alpha"
         }
     }
 
     defaultConfig {
-        applicationId "com.cylonid.nativealpha"
-        minSdkVersion 28
-        targetSdkVersion 35
-        versionCode 1520
-        versionName "1.5.2"
+        applicationId = "com.cylonid.nativealpha"
+        minSdkVersion = 28
+        targetSdkVersion = 35
+        versionCode = 1520
+        versionName = "1.5.2"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         testInstrumentationRunnerArguments clearPackageData: 'true'
     }
     buildFeatures {
-        dataBinding true
-        viewBinding true
+        dataBinding = true
+        viewBinding = true
+        buildConfig = true
     }
     kotlinOptions {
         jvmTarget = '17'
@@ -105,14 +106,14 @@ android {
         unitTests {
             includeAndroidResources = true
         }
-        execution 'ANDROIDX_TEST_ORCHESTRATOR'
+        execution = 'ANDROIDX_TEST_ORCHESTRATOR'
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
 
-    namespace 'com.cylonid.nativealpha'
+    namespace = 'com.cylonid.nativealpha'
 
 }
 repositories {
