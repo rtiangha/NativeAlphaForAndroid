@@ -51,7 +51,7 @@ jobs:
       - name: Install New Packages
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: zip unzip python3 ccache apksigner && sudo apt-get clean
+          packages: zip unzip python3 ccache apksigner 
       - name: Install JDK 17 
         uses: actions/setup-java@v4
         with:
