@@ -67,7 +67,7 @@ jobs:
           link-to-sdk: true
       - name: Build
         run: |
-          ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }} JAVA_HOME=$JAVA_HOME_17_X64 ./gradlew assembleExtendedGithub
+          ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }} JAVA_HOME=$JAVA_HOME_17_X64 ./gradlew assembleExtendedGithubRelease
           mkdir -p app/build/outputs/apk/release
           cp app/build/outputs/apk/extendedGithub/release/*-unsigned.apk app/build/outputs/apk/release/
         env:
