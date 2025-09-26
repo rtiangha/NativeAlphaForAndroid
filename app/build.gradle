@@ -14,7 +14,6 @@ android {
              delete fileTree('src/main/java/com/cylonid/nativealpha') {
                  include '**/__WebViewActivity_*.java'
              }
-             ant.move(file: 'src/main/AndroidManifest.xml', tofile:'src/main/AndroidManifest_original.xml')
              delete fileTree('src/main') {
                  include '**/AndroidManifest.xml'
              }
