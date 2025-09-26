@@ -26,8 +26,8 @@ android {
         abi {
             enable = true
             reset()
-            include "armeabi-v7a", "x86", "arm64-v8a", "x86_64"
-            universalApk = true
+            include "arm64-v8a"
+            universalApk = false 
         }
     }
     flavorDimensions "default"
@@ -49,8 +49,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.cylonid.nativealpha"
-        minSdkVersion = 28
+        applicationId "com.cylonid.nativealpha"
+        minSdkVersion = 35 
         targetSdkVersion = 35
         versionCode = 1520
         versionName = "1.5.2"
@@ -64,7 +64,7 @@ android {
         buildConfig = true
     }
     kotlinOptions {
-        jvmTarget = '17'
+        jvmTarget = '21'
     }
     buildTypes {
         release {
@@ -104,8 +104,8 @@ android {
         execution = 'ANDROIDX_TEST_ORCHESTRATOR'
     }
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_17
-        targetCompatibility JavaVersion.VERSION_17
+        sourceCompatibility JavaVersion.VERSION_21
+        targetCompatibility JavaVersion.VERSION_21
     }
 
     namespace = 'com.cylonid.nativealpha'
