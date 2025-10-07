@@ -153,7 +153,7 @@ dependencies {
     implementation "androidx.biometric:biometric:1.1.0"
     implementation 'com.ernestoyaquello.dragdropswiperecyclerview:drag-drop-swipe-recyclerview:1.2.0'
     implementation "androidx.fragment:fragment-ktx:1.8.9"
-    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:a477b4b947') {
+    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:8ba5484113') {
         exclude group: 'org.jetbrains.anko'
     }
     implementation 'androidx.work:work-runtime:2.10.5'
