@@ -21,6 +21,10 @@
     <string name="create_shortcut_on_home_screen">Create shortcut on home screen</string>
     <string name="url" translatable="false">URL</string>
     <string name="choose_file">Choose File</string>
+    <string name="pick_html_file">Pick HTML File</string>
+    <string name="file_picker_error">Unable to open file picker. Please install a file manager app.</string>
+    <string name="file_permission_denied">File access permission denied. Unable to select files.</string>
+    <string name="permission_file_rationale">To open local HTML files, Native Alpha needs permission to access your files. This permission is only requested on Android versions below 13.</string>
     <string name="use_two_finger_swipes_for_browser_forward_and_backward_navigation">Use two-finger swipes ⇄ for browser forward and backward navigation</string>
     <string-array name="ui_modes">
         <item>System default</item>

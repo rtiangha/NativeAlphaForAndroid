@@ -1,8 +1,11 @@
 package com.cylonid.nativealpha
 
+import android.Manifest
 import android.content.DialogInterface
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.text.Editable
 import android.text.Html
@@ -15,6 +18,7 @@ import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
+import androidx.core.content.ContextCompat
 import com.cylonid.nativealpha.databinding.AddWebsiteDialogueBinding
 import com.cylonid.nativealpha.fragments.webapplist.WebAppListFragment
 import com.cylonid.nativealpha.helper.AdblockLifecycleHelper
@@ -22,7 +26,9 @@ import com.cylonid.nativealpha.model.DataManager
 import com.cylonid.nativealpha.model.WebApp
 import com.cylonid.nativealpha.util.Const
 import com.cylonid.nativealpha.util.EntryPointUtils.entryPointReached
+import com.cylonid.nativealpha.util.NotificationUtils
 import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.google.android.material.snackbar.Snackbar
 import io.github.edsuns.adfilter.AdFilter
 
 
@@ -34,6 +40,14 @@ class MainActivity : AppCompatActivity() {
         uri?.let {
             contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             currentDialogBinding?.websiteUrl?.setText(it.toString())
+        }
+    }
+
+    private val filePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted: Boolean ->
+        if (isGranted) {
+            launchFilePicker()
+        } else {
+            NotificationUtils.showInfoSnackbar(this, getString(R.string.file_permission_denied), Snackbar.LENGTH_LONG)
         }
     }
 
@@ -161,7 +175,7 @@ class MainActivity : AppCompatActivity() {
         currentDialogBinding = localBinding
 
         localBinding.btnChooseFile.setOnClickListener {
-            filePickerLauncher.launch(arrayOf("text/html"))
+            handleFilePickerClick()
         }
 
         val dialog = AlertDialog.Builder(this@MainActivity)
@@ -208,6 +222,42 @@ class MainActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
         })
 
+    }
+
+    private fun handleFilePickerClick() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            when {
+                ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED -> {
+                    launchFilePicker()
+                }
+                shouldShowRequestPermissionRationale(Manifest.permission.READ_EXTERNAL_STORAGE) -> {
+                    AlertDialog.Builder(this)
+                        .setMessage(getString(R.string.permission_file_rationale))
+                        .setPositiveButton(R.string.ok) { _, _ ->
+                            filePermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                        }
+                        .setNegativeButton(R.string.cancel, null)
+                        .create()
+                        .show()
+                }
+                else -> {
+                    filePermissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+                }
+            }
+        } else {
+            launchFilePicker()
+        }
+    }
+
+    private fun launchFilePicker() {
+        try {
+            filePickerLauncher.launch(arrayOf("text/html", "text/*", "application/xhtml+xml"))
+        } catch (e: Exception) {
+            NotificationUtils.showInfoSnackbar(this, getString(R.string.file_picker_error), Snackbar.LENGTH_LONG)
+        }
     }
 }
 
