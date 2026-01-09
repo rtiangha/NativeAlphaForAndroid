@@ -54,6 +54,7 @@ import androidx.core.content.ContextCompat;
 import androidx.webkit.WebSettingsCompat;
 import androidx.webkit.WebViewFeature;
 
+import com.cylonid.nativealpha.client.LocalFileWebViewClient;
 import com.cylonid.nativealpha.databinding.DialogHttpAuthBinding;
 import com.cylonid.nativealpha.helper.AdblockLifecycleHelper;
 import com.cylonid.nativealpha.helper.AdblockProviderApiHelper;
@@ -210,12 +211,20 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         } else if(DataManager.getInstance().getSettings().getAlwaysShowSoftwareButtons()) {
             this.showSystemBars();
         }
-        wv.setWebViewClient(new CustomBrowser());
+        if (webapp.isLocalFile()) {
+            wv.setWebViewClient(new LocalFileWebViewClient(this));
+        } else {
+            wv.setWebViewClient(new CustomBrowser());
+        }
         wv.getSettings().setSafeBrowsingEnabled(false);
         wv.getSettings().setDomStorageEnabled(true);
         wv.getSettings().setDatabaseEnabled(true);
         wv.getSettings().setAllowFileAccess(true);
         wv.getSettings().setBlockNetworkLoads(false);
+        if (webapp.isLocalFile()) {
+            wv.getSettings().setAllowFileAccessFromFileURLs(true);
+            wv.getSettings().setAllowUniversalAccessFromFileURLs(true);
+        }
 //        wv.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE);
         this.setDarkModeIfNeeded();
 
@@ -616,8 +625,13 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             builder.setNegativeButton(getString(android.R.string.cancel), (dialog, id) -> finish());
             final AlertDialog dialog = builder.create();
             dialog.show();
-        } else
-            view.loadUrl(url, CUSTOM_HEADERS);
+        } else {
+            if (url.startsWith("content://")) {
+                view.loadUrl(url);
+            } else {
+                view.loadUrl(url, CUSTOM_HEADERS);
+            }
+        }
 
     }
     private void hideSystemBars() {
