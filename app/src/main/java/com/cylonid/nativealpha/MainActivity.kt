@@ -2,12 +2,14 @@ package com.cylonid.nativealpha
 
 import android.content.DialogInterface
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
 import android.text.Html
 import android.text.TextWatcher
 import android.view.Menu
 import android.view.MenuItem
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
 import androidx.annotation.VisibleForTesting
 import androidx.appcompat.app.AlertDialog
@@ -26,6 +28,14 @@ import io.github.edsuns.adfilter.AdFilter
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webAppListFragment: WebAppListFragment
+    private var currentDialogBinding: AddWebsiteDialogueBinding? = null
+
+    private val filePickerLauncher = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+        uri?.let {
+            contentResolver.takePersistableUriPermission(it, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            currentDialogBinding?.websiteUrl?.setText(it.toString())
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         setTheme(R.style.AppTheme)
@@ -148,18 +158,29 @@ class MainActivity : AppCompatActivity() {
 
     private fun buildAddWebsiteDialog(title: String) {
         val localBinding = AddWebsiteDialogueBinding.inflate(layoutInflater)
+        currentDialogBinding = localBinding
+
+        localBinding.btnChooseFile.setOnClickListener {
+            filePickerLauncher.launch(arrayOf("text/html"))
+        }
+
         val dialog = AlertDialog.Builder(this@MainActivity)
             .setView(localBinding.root)
             .setTitle(title)
             .setPositiveButton(R.string.ok) { _: DialogInterface, _: Int ->
                 val url = localBinding.websiteUrl.text.toString().trim()
-                val urlWithProtocol =
-                    if (url.startsWith("https://") || url.startsWith("http://")) url else "https://$url"
+                val isLocalFile = url.startsWith("content://")
+                val urlWithProtocol = when {
+                    isLocalFile -> url
+                    url.startsWith("https://") || url.startsWith("http://") -> url
+                    else -> "https://$url"
+                }
                 val newSite = WebApp(
                     urlWithProtocol,
                     DataManager.getInstance().incrementedID,
                     DataManager.getInstance().incrementedOrder
                 )
+                newSite.isLocalFile = isLocalFile
                 newSite.applySettingsForNewWebApp()
                 DataManager.getInstance().addWebsite(newSite)
 
@@ -168,8 +189,11 @@ class MainActivity : AppCompatActivity() {
                     val frag = ShortcutDialogFragment.newInstance(newSite)
                     frag.show(supportFragmentManager, "SCFetcher-" + newSite.ID)
                 }
+                currentDialogBinding = null
             }
-            .setNegativeButton(R.string.cancel, null)
+            .setNegativeButton(R.string.cancel) { _: DialogInterface, _: Int ->
+                currentDialogBinding = null
+            }
             .create()
 
         dialog.show()
@@ -186,5 +210,4 @@ class MainActivity : AppCompatActivity() {
 
     }
 }
-
 
