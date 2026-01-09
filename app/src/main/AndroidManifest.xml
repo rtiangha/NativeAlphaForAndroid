@@ -94,6 +94,15 @@
             android:theme="@style/Theme.MaterialComponents.DayNight.NoActionBar">
         </activity>
 
+        <provider
+            android:name="com.cylonid.nativealpha.util.LocalHtmlFileProvider"
+            android:authorities="${applicationId}.localhtmlfileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
 
         <meta-data android:name="com.samsung.android.keepalive.density" android:value="true"/>
         <meta-data android:name="com.samsung.android.multidisplay.keep_process_alive" android:value="true"/>
