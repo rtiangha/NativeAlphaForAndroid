@@ -19,6 +19,7 @@ data class WebApp(var baseUrl: String, val ID: Int) {
     var title: String
     var isActiveEntry = true
     var isOverrideGlobalSettings = true
+    var isLocalFile = false
 
     var isOpenUrlExternal = false
     var isAllowCookies = true
@@ -83,6 +84,7 @@ data class WebApp(var baseUrl: String, val ID: Int) {
 
     //This part of the copy ctor should be callable independently from actual object construction to copy values of the global web app template
     fun copySettings(other: WebApp) {
+        isLocalFile = other.isLocalFile
         isOpenUrlExternal = other.isOpenUrlExternal
         isAllowCookies = other.isAllowCookies
         isAllowThirdPartyCookies = other.isAllowThirdPartyCookies

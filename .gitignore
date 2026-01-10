@@ -16,3 +16,7 @@ app/release/**
 app/standard/**
 app/extended/**
 app/extendedGithub/**
+
+# Gradle-generated files
+app/src/main/AndroidManifest.xml
+app/src/main/java/com/cylonid/nativealpha/__WebViewActivity_*/**
