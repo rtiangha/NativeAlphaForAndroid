@@ -108,7 +108,6 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
     private Map<String, String> CUSTOM_HEADERS;
     protected ValueCallback<Uri[]> filePathCallback;
 
-    private boolean quitOnNextBackpress = false;
     private Handler reload_handler = null;
     private WebApp webapp = null;
     private String urlOnFirstPageload = "";
@@ -528,21 +527,18 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
     @Override
     public void onBackPressed() {
         WebApp webapp = DataManager.getInstance().getWebApp(webappID);
+        String currentUrl = wv.getUrl();
+        String baseUrl = webapp.getBaseUrl();
 
-        if(wv.canGoBack()) {
+        boolean canGoBack = wv.canGoBack();
+        boolean isAtBaseUrl = currentUrl != null && (currentUrl.equals(baseUrl) || currentUrl.startsWith(baseUrl + "/"));
+
+        if(canGoBack && !isAtBaseUrl) {
             wv.goBack();
             return;
         }
 
-        if(quitOnNextBackpress) {
-            quitOnNextBackpress = false;
-            moveTaskToBack(true);
-            return;
-        }
-
-        loadURL(wv, webapp.getBaseUrl());
-        quitOnNextBackpress = true;
-
+        moveTaskToBack(true);
     }
 
     @Override
