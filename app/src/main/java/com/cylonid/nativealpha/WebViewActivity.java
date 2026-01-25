@@ -279,63 +279,55 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
 
 
         wv.setDownloadListener((dl_url, userAgent, contentDisposition, mimeType, contentLength) -> {
-
-            if (mimeType.equals("application/pdf")) {
-                Intent i = new Intent(Intent.ACTION_VIEW);
-                i.setData(Uri.parse(dl_url));
-                startActivity(i);
-            } else {
-                if(dl_url != null && !dl_url.equals("")) {
-                    if(dl_url.startsWith("blob:")) {
-                        dl_url = dl_url.replace("blob:", "");
-                        try {
-                            dl_url = URLDecoder.decode(dl_url, "UTF-8");
-                        } catch (UnsupportedEncodingException e) {
-                            e.printStackTrace();
-                        }
+            if(dl_url != null && !dl_url.isEmpty()) {
+                // skip download for embedded PDFs
+                if (mimeType != null && mimeType.equals("application/pdf")) {
+                    if (contentDisposition == null || contentDisposition.isEmpty()) {
+                        return;
                     }
-                    DownloadManager.Request request = null;
-                    try {
-                        request = new DownloadManager.Request(
-                                Uri.parse(dl_url));
-                    }
-                    catch(Exception e) {
-                        NotificationUtils.showInfoSnackbar(this, getString(R.string.file_download), Snackbar.LENGTH_SHORT);
-                    }
-                  String file_name = Utility.getFileNameFromDownload(dl_url, contentDisposition, mimeType);
+                }
+                if(dl_url.startsWith("blob:")) {
+                    return;
+                }
+                DownloadManager.Request request;
+                try {
+                    request = new DownloadManager.Request(Uri.parse(dl_url));
+                }
+                catch(Exception e) {
+                    NotificationUtils.showInfoSnackbar(this, getString(R.string.file_download), Snackbar.LENGTH_SHORT);
+                    return;
+                }
+              String file_name = Utility.getFileNameFromDownload(dl_url, contentDisposition, mimeType);
 
-                  request.setMimeType(mimeType);
-                  request.addRequestHeader("cookie", CookieManager.getInstance().getCookie(dl_url));
-                  request.addRequestHeader("User-Agent", userAgent);
-                  request.setTitle(file_name);
-                  request.allowScanningByMediaScanner();
-                  request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                  request.setDestinationInExternalPublicDir(
-                          Environment.DIRECTORY_DOWNLOADS, file_name);
+              request.setMimeType(mimeType);
+              request.addRequestHeader("cookie", CookieManager.getInstance().getCookie(dl_url));
+              request.addRequestHeader("User-Agent", userAgent);
+              request.setTitle(file_name);
+              request.allowScanningByMediaScanner();
+              request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+              request.setDestinationInExternalPublicDir(
+                      Environment.DIRECTORY_DOWNLOADS, file_name);
 
-                  DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+              DownloadManager dm = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
 
-                  if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                      String[] perms = {Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE};
-                      if (!EasyPermissions.hasPermissions(WebViewActivity.this, perms)) {
-                          dl_request = request;
-                          EasyPermissions.requestPermissions(WebViewActivity.this, getString(R.string.permission_storage_rationale), Const.PERMISSION_RC_STORAGE, perms);
-                      } else {
-                          if (dm != null) {
-                              dm.enqueue(request);
-                              NotificationUtils.showInfoSnackbar(this, getString(R.string.file_download), Snackbar.LENGTH_SHORT);
-                          }
-                      }
-                  }
-                  //No storage permission needed for Android 10+
-                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+              if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                  String[] perms = {Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.READ_EXTERNAL_STORAGE};
+                  if (!EasyPermissions.hasPermissions(WebViewActivity.this, perms)) {
+                      dl_request = request;
+                      EasyPermissions.requestPermissions(WebViewActivity.this, getString(R.string.permission_storage_rationale), Const.PERMISSION_RC_STORAGE, perms);
+                  } else {
                       if (dm != null) {
                           dm.enqueue(request);
                           NotificationUtils.showInfoSnackbar(this, getString(R.string.file_download), Snackbar.LENGTH_SHORT);
                       }
                   }
-                }
-
+              }
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                  if (dm != null) {
+                      dm.enqueue(request);
+                      NotificationUtils.showInfoSnackbar(this, getString(R.string.file_download), Snackbar.LENGTH_SHORT);
+                  }
+              }
             }
         });
         wv.setOnTouchListener(new View.OnTouchListener() {
