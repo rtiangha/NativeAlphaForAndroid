@@ -129,11 +129,11 @@ dependencies {
     implementation 'androidx.webkit:webkit:1.15.0'
     implementation 'com.jakewharton:process-phoenix:3.0.0'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:6.0.2'
-    testImplementation 'org.robolectric:robolectric:4.16'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
     testImplementation 'org.json:json:20251224'
     testImplementation 'org.mockito:mockito-core:5.21.0'
     testImplementation 'org.mockito:mockito-android:5.21.0'
-    testImplementation 'org.mockito.kotlin:mockito-kotlin:6.1.0'
+    testImplementation 'org.mockito.kotlin:mockito-kotlin:6.2.3'
     androidTestImplementation 'org.mockito:mockito-android:5.21.0'
     androidTestImplementation 'androidx.test.espresso:espresso-contrib:3.7.0'
     androidTestImplementation 'androidx.test.espresso:espresso-web:3.7.0'
@@ -149,10 +149,10 @@ dependencies {
     implementation "androidx.biometric:biometric:1.1.0"
     implementation 'com.ernestoyaquello.dragdropswiperecyclerview:drag-drop-swipe-recyclerview:1.2.0'
     implementation "androidx.fragment:fragment-ktx:1.8.9"
-    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:34326a5901') {
+    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:2c9d46ae95') {
         exclude group: 'org.jetbrains.anko'
     }
-    implementation 'androidx.work:work-runtime:2.11.0'
+    implementation 'androidx.work:work-runtime:2.11.1'
     kapt "com.android.databinding:compiler:3.1.4"
     implementation 'com.google.android.material:material:1.13.0'
 
