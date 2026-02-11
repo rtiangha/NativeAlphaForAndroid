@@ -122,8 +122,8 @@ dependencies {
     implementation 'com.mikhaellopez:circularprogressbar:3.1.0'
     implementation 'org.jsoup:jsoup:1.22.1'
     implementation 'com.github.ihimanshurawat:Hasher:1.2'
-    implementation 'androidx.navigation:navigation-fragment:2.9.6'
-    implementation 'androidx.navigation:navigation-ui:2.9.6'
+    implementation 'androidx.navigation:navigation-fragment:2.9.7'
+    implementation 'androidx.navigation:navigation-ui:2.9.7'
     implementation 'com.google.code.gson:gson:2.13.2'
     implementation 'io.github.medyo:android-about-page:2.0.0'
     implementation 'androidx.webkit:webkit:1.15.0'
@@ -149,7 +149,7 @@ dependencies {
     implementation "androidx.biometric:biometric:1.1.0"
     implementation 'com.ernestoyaquello.dragdropswiperecyclerview:drag-drop-swipe-recyclerview:1.2.0'
     implementation "androidx.fragment:fragment-ktx:1.8.9"
-    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:2c9d46ae95') {
+    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:ef1880f7f7') {
         exclude group: 'org.jetbrains.anko'
     }
     implementation 'androidx.work:work-runtime:2.11.1'
