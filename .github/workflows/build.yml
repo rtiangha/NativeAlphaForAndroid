@@ -19,7 +19,7 @@ jobs:
       - name: Pack
         run: ./.ci/source.sh
       - name: Upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: source
           path: artifacts/
@@ -90,7 +90,7 @@ jobs:
           rm app/build/outputs/apk/release/*-signed.apk.* 
           rm app/build/outputs/apk/release/signingKey.jks 
       - name: Upload
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.OS }}-${{ env.TARGET }}
           path: app/build/outputs/apk/release 
