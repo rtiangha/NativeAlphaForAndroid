@@ -470,47 +470,46 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             mPopupMenu.getMenu().findItem(R.id.cmShowAdblockProviders).setVisible(true);
         }
         mPopupMenu.setOnMenuItemClickListener(menuItem -> {
-            switch(menuItem.getItemId()) {
-                case R.id.cmItemForward:
-                    wv.goForward();
-                    return true;
-                case R.id.cmItemBack:
-                    onBackPressed();
-                    return true;
-                case R.id.cmItemReload:
-                    wv.reload();
-                    return true;
-                case R.id.cmItemCopyUrl:
-                    ClipboardManager clipboard =  getSystemService(ClipboardManager.class);
-                    ClipData clip = ClipData.newPlainText("URL", wv.getUrl());
-                    clipboard.setPrimaryClip(clip);
-                    return true;
-                case R.id.cmItemShareUrl:
-                    new ShareCompat.IntentBuilder(WebViewActivity.this)
-                            .setType("text/plain")
-                            .setChooserTitle("Share URL")
-                            .setText(hasLink ? lastLongClickedLinkUrl : wv.getUrl())
-                            .startChooser();
-                    return true;
-                case R.id.cmItemCloseWebApp:
-                    finishAndRemoveTask();
-                    return true;
-                case R.id.cmFallbackContextmenuTemp:
-                    fallbackToDefaultLongClickBehaviour = true;
-                    return true;
-                case R.id.cmMainMenu:
-                    Intent intent = new Intent(this, MainActivity.class);
-                    startActivity(intent);
-                    return true;
-                case R.id.cmShowAdblockProviders:
-                    StringBuilder message = new StringBuilder();
-                    for(Map.Entry<String, Filter> entry :  Objects.requireNonNull(AdFilter.Companion.get().getViewModel().getFilters().getValue()).entrySet()) {
-                        Filter filter = entry.getValue();
-                        message.append(filter.getUrl()).append(" has downloaded: ").append(filter.hasDownloaded()).append("\n\n");
+            int id = menuItem.getItemId();
+            if (id == R.id.cmItemForward) {
+                wv.goForward();
+                return true;
+            } else if (id == R.id.cmItemBack) {
+                onBackPressed();
+                return true;
+            } else if (id == R.id.cmItemReload) {
+                wv.reload();
+                return true;
+            } else if (id == R.id.cmItemCopyUrl) {
+                ClipboardManager clipboard = getSystemService(ClipboardManager.class);
+                ClipData clip = ClipData.newPlainText("URL", wv.getUrl());
+                clipboard.setPrimaryClip(clip);
+                return true;
+            } else if (id == R.id.cmItemShareUrl) {
+                new ShareCompat.IntentBuilder(WebViewActivity.this)
+                        .setType("text/plain")
+                        .setChooserTitle("Share URL")
+                        .setText(hasLink ? lastLongClickedLinkUrl : wv.getUrl())
+                        .startChooser();
+                return true;
+            } else if (id == R.id.cmItemCloseWebApp) {
+                finishAndRemoveTask();
+                return true;
+            } else if (id == R.id.cmFallbackContextmenuTemp) {
+                fallbackToDefaultLongClickBehaviour = true;
+                return true;
+            } else if (id == R.id.cmMainMenu) {
+                Intent intent = new Intent(this, MainActivity.class);
+                startActivity(intent);
+                return true;
+            } else if (id == R.id.cmShowAdblockProviders) {
+                StringBuilder message = new StringBuilder();
+                for (Map.Entry<String, Filter> entry : Objects.requireNonNull(AdFilter.Companion.get().getViewModel().getFilters().getValue()).entrySet()) {
+                    Filter filter = entry.getValue();
+                    message.append(filter.getUrl()).append(" has downloaded: ").append(filter.hasDownloaded()).append("\n\n");
                 }
-                    NotificationUtils.showToast(this, message.toString());
-                    return true;
-
+                NotificationUtils.showToast(this, message.toString());
+                return true;
             }
             return false;
         });

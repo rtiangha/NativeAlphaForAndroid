@@ -1,23 +1,8 @@
 apply plugin: 'com.android.application'
-apply plugin: 'kotlin-android'
-apply plugin: 'kotlin-kapt'
 apply plugin: 'com.mikepenz.aboutlibraries.plugin'
 
 //https://gist.github.com/shakalaca/6422811
 android {
-     applicationVariants.all { variant ->
-         variant.assembleProvider.get().doLast {
-             delete fileTree('src/main/java/com/cylonid/nativealpha') {
-                 include '**/__WebViewActivity_*.java'
-             }
-             delete fileTree('src/main') {
-                 include '**/AndroidManifest.xml'
-             }
-             ant.move(file: 'src/main/AndroidManifest_original.xml', tofile:'src/main/AndroidManifest.xml')
-
-         }
-     }
-
     dependenciesInfo {
         includeInApk = false
     }
@@ -62,9 +47,7 @@ android {
         dataBinding = true
         viewBinding = true
         buildConfig = true
-    }
-    kotlinOptions {
-        jvmTarget = '17'
+        resValues = true
     }
     buildTypes {
         release {
@@ -74,27 +57,6 @@ android {
         debug {
           applicationIdSuffix = ".debug"
           resValue "string", "app_name", "_DEBUG-Native Alpha"
-        }
-        applicationVariants.all {
-                // this method is use to rename your release apk only
-            variant ->
-                variant.outputs.each {
-                        // on below line we are setting a name to our apk
-                    output ->
-                        // on below line we are specifying our app name.
-                        project.ext { appName = 'NativeAlpha' }
-                        // on below line we are adding the formatted date to our apk file name.
-                        def formattedDate = new Date().format('yyyy-MM-dd-HH-mm-ss')
-                        // on below line we are creating a new name for our apk.
-                        def newName = output.outputFile.name
-                        // on below line we are replacing our previous name with our app name.
-                        newName = newName.replace("app-", "$project.ext.appName-")
-                        // on below line we are replacing -release with our formatted date.
-                        newName = newName.replace("-release", "-release-" + "v" + variant.versionName)
-                        // at last we are setting our apk name to it.
-                        output.outputFileName = newName
-
-                }
         }
     }
     testOptions {
@@ -149,11 +111,10 @@ dependencies {
     implementation "androidx.biometric:biometric:1.1.0"
     implementation 'com.ernestoyaquello.dragdropswiperecyclerview:drag-drop-swipe-recyclerview:1.2.0'
     implementation "androidx.fragment:fragment-ktx:1.8.9"
-    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:897468d3e0') {
+    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:0747937b01') {
         exclude group: 'org.jetbrains.anko'
     }
     implementation 'androidx.work:work-runtime:2.11.1'
-    kapt "com.android.databinding:compiler:3.1.4"
     implementation 'com.google.android.material:material:1.13.0'
 
 
