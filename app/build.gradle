@@ -88,7 +88,7 @@ dependencies {
     implementation 'androidx.navigation:navigation-ui:2.9.7'
     implementation 'com.google.code.gson:gson:2.13.2'
     implementation 'io.github.medyo:android-about-page:2.0.0'
-    implementation 'androidx.webkit:webkit:1.15.0'
+    implementation 'androidx.webkit:webkit:1.16.0'
     implementation 'com.jakewharton:process-phoenix:3.0.0'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:6.1.1'
     testImplementation 'org.robolectric:robolectric:4.16.1'
