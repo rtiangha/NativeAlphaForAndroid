@@ -6,7 +6,7 @@ android {
     dependenciesInfo {
         includeInApk = false
     }
-    compileSdk = 36
+    compileSdk = 37
     splits {
         abi {
             enable = true
@@ -111,7 +111,7 @@ dependencies {
     implementation "androidx.biometric:biometric:1.1.0"
     implementation 'com.ernestoyaquello.dragdropswiperecyclerview:drag-drop-swipe-recyclerview:1.2.0'
     implementation "androidx.fragment:fragment-ktx:1.8.9"
-    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:65991c27a6') {
+    implementation('com.github.rtiangha.AdblockAndroid:ad-filter:d3432ad462') {
         exclude group: 'org.jetbrains.anko'
     }
     implementation 'androidx.work:work-runtime:2.11.2'
