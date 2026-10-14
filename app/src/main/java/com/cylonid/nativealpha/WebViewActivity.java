@@ -228,7 +228,11 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         wv.getSettings().setSafeBrowsingEnabled(false);
         wv.getSettings().setDomStorageEnabled(true);
         wv.getSettings().setDatabaseEnabled(true);
-        wv.getSettings().setAllowFileAccess(true);
+        // Only local-file web apps (or ones whose start URL is a file: URL) need WebView file access.
+        // Assets and resources (file:///android_asset, android_res) work regardless.
+        boolean needsFileAccess = webapp.isLocalFile()
+                || webapp.getBaseUrl().regionMatches(true, 0, "file:", 0, 5);
+        wv.getSettings().setAllowFileAccess(needsFileAccess);
         wv.getSettings().setBlockNetworkLoads(false);
         if (webapp.isLocalFile()) {
             wv.getSettings().setAllowFileAccessFromFileURLs(true);
