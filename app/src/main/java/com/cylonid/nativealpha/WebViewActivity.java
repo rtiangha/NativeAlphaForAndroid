@@ -85,7 +85,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.stream.Stream;
 
 import io.github.edsuns.adfilter.AdFilter;
 import io.github.edsuns.adfilter.Filter;
@@ -206,8 +205,9 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             });
         }
 
-        String fieldName = Stream.of(WebViewActivity.class.getDeclaredFields()).filter(f -> f.getType() == WebView.class).findFirst().orElseThrow(null).getName();
-        String uaString = wv.getSettings().getUserAgentString().replace("; " + fieldName, "");
+        // Strip the "; wv" WebView marker from the default user agent (some sites, e.g. Google sign-in,
+        // reject WebView user agents). Hardcoded rather than derived by reflection so R8 can't break it.
+        String uaString = wv.getSettings().getUserAgentString().replace("; wv", "");
         wv.getSettings().setUserAgentString(uaString);
         if (webapp.isUseCustomUserAgent()) {
             if(webapp.getUserAgent() != null && !webapp.getUserAgent().equals("")) {

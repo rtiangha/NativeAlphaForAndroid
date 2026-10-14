@@ -19,3 +19,24 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+
+# ---------------------------------------------------------------------------
+# Readable stack traces for release builds (use with build/outputs/mapping/.../mapping.txt)
+# ---------------------------------------------------------------------------
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+
+# ---------------------------------------------------------------------------
+# Gson
+# ---------------------------------------------------------------------------
+# Generic type information is needed for `new TypeToken<ArrayList<WebApp>>() {}` (DataManager).
+-keepattributes Signature,*Annotation*
+-keep class * extends com.google.gson.reflect.TypeToken
+
+# App settings are persisted with Gson, which uses field names as JSON keys
+# (DataManager, WebAppDeserializer, GlobalSettingsDeserializer, DataVersionConverter).
+# Field names in the model classes must therefore not be renamed or removed.
+-keepclassmembers class com.cylonid.nativealpha.model.** {
+    <fields>;
+}
