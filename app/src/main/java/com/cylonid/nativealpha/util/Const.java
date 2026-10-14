@@ -27,6 +27,7 @@ public class Const {
     public static ArrayList<AdblockConfig> getDefaultAdBlockConfig() {
         ArrayList<AdblockConfig> list = new ArrayList<>();
         list.add(new AdblockConfig("Fanboy Ultimate List", "https://fanboy.co.nz/r/fanboy-ultimate.txt"));
+        list.add(new AdblockConfig("Bypass Paywalls Clean", "https://gitflic.ru/project/magnolia1234/bypass-paywalls-clean-filters/blob/raw?file=bpc-paywall-filter.txt"));
         return list;
     }
 }
