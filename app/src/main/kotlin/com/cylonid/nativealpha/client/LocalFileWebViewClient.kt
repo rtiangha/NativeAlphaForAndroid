@@ -6,16 +6,22 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.InputStream
+import java.security.MessageDigest
 
 class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
 
     private val copiedFiles = mutableMapOf<String, File>()
     private var baseHtmlUri: Uri? = null
-    private val resourceMapping = mutableMapOf<String, File>()
+
+    // What the page is allowed to read. Established by the first main-frame document:
+    // for file:// the directory that document lives in, for content:// its authority.
+    private var allowedDir: File? = null
+    private var allowedAuthority: String? = null
 
     override fun shouldInterceptRequest(
         view: WebView,
@@ -24,7 +30,19 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
         val uri = request.url
         val scheme = uri.scheme
 
+        if (scheme == "file") {
+            // APK assets/resources (e.g. the built-in error page) are handled by WebView itself.
+            val path = uri.path.orEmpty()
+            if (path.startsWith("/android_asset/") || path.startsWith("/android_res/")) {
+                return super.shouldInterceptRequest(view, request)
+            }
+        }
+
         if (scheme == "file" || scheme == "content") {
+            // Answer explicitly: returning null would let WebView try to load the URL itself.
+            if (!isAccessAllowed(uri, request.isForMainFrame)) {
+                return forbiddenResponse()
+            }
             return handleLocalFile(uri)
         }
 
@@ -38,12 +56,51 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
         return super.shouldInterceptRequest(view, request)
     }
 
+    private fun forbiddenResponse() = WebResourceResponse(
+        "text/plain", "UTF-8", 403, "Forbidden", emptyMap(), ByteArrayInputStream(ByteArray(0))
+    )
+
+    private fun cacheRoot() = File(context.cacheDir, "local_files")
+
+    private fun canonicalOrNull(path: String?): File? =
+        try {
+            path?.let { File(it).canonicalFile }
+        } catch (e: Exception) {
+            null
+        }
+
+    /** Both arguments must be canonical. */
+    private fun isInside(file: File, dir: File): Boolean =
+        file.path.startsWith(dir.path + File.separator)
+
+    private fun isAccessAllowed(uri: Uri, isMainFrame: Boolean): Boolean {
+        if (allowedDir == null && allowedAuthority == null) {
+            if (!isMainFrame) return false
+            if (uri.scheme == "file") {
+                allowedDir = canonicalOrNull(uri.path)?.parentFile
+            } else {
+                allowedAuthority = uri.authority
+            }
+            return allowedDir != null || allowedAuthority != null
+        }
+
+        return when (uri.scheme) {
+            "file" -> {
+                val file = canonicalOrNull(uri.path) ?: return false
+                val dir = allowedDir
+                (dir != null && isInside(file, dir)) || isInside(file, cacheRoot().canonicalFile)
+            }
+            "content" -> allowedAuthority != null && uri.authority == allowedAuthority
+            else -> false
+        }
+    }
+
     private fun handleLocalFile(uri: Uri): WebResourceResponse? {
         try {
             val inputStream = if (uri.scheme == "content") {
                 context.contentResolver.openInputStream(uri)
             } else {
-                FileInputStream(File(uri.path ?: return null))
+                FileInputStream(canonicalOrNull(uri.path) ?: return null)
             }
 
             inputStream ?: return null
@@ -53,7 +110,6 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
 
             if (mimeType == "text/html") {
                 baseHtmlUri = uri
-                scanAndCopyResources(file, uri)
             }
 
             val fileInputStream = FileInputStream(file)
@@ -67,107 +123,74 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
 
     private fun tryResolveRelativeResource(requestUri: Uri): WebResourceResponse? {
         val baseUri = baseHtmlUri ?: return null
-        
-        val resourcePath = requestUri.path?.substringAfterLast('/') ?: return null
-        val cachedFile = resourceMapping[resourcePath]
-        
-        if (cachedFile != null && cachedFile.exists()) {
-            return try {
-                val mimeType = getMimeType(Uri.fromFile(cachedFile))
-                WebResourceResponse(mimeType, "UTF-8", FileInputStream(cachedFile))
-            } catch (e: Exception) {
-                null
-            }
-        }
+        val requestPath = requestUri.path ?: return null
 
-        val resolvedFile = resolveRelativePath(baseUri, requestUri.path ?: return null)
-        if (resolvedFile != null && resolvedFile.exists()) {
-            try {
-                val mimeType = getMimeType(Uri.fromFile(resolvedFile))
-                val copiedFile = copyFileToAppStorage(resolvedFile)
-                resourceMapping[resourcePath] = copiedFile
-                return WebResourceResponse(mimeType, "UTF-8", FileInputStream(copiedFile))
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-
-        return null
-    }
-
-    private fun resolveRelativePath(baseUri: Uri, relativePath: String): File? {
-        if (baseUri.scheme != "file") return null
-        
-        val basePath = baseUri.path ?: return null
-        val baseFile = File(basePath)
-        val baseDir = baseFile.parentFile ?: return null
-        
-        val cleanPath = relativePath.trimStart('/')
-        val targetFile = File(baseDir, cleanPath)
-        
-        return if (targetFile.exists()) targetFile else null
-    }
-
-    private fun scanAndCopyResources(htmlFile: File, baseUri: Uri) {
-        try {
-            val content = htmlFile.readText()
-            val baseDir = if (baseUri.scheme == "file") {
-                File(baseUri.path ?: return).parentFile ?: return
-            } else {
-                return
-            }
-
-            val patterns = listOf(
-                """src=["']([^"']+)["']""".toRegex(),
-                """href=["']([^"']+)["']""".toRegex(),
-                """url\(["']?([^"')]+)["']?\)""".toRegex()
-            )
-
-            patterns.forEach { pattern ->
-                pattern.findAll(content).forEach { match ->
-                    val resourcePath = match.groupValues[1]
-                    if (!resourcePath.startsWith("http://") && 
-                        !resourcePath.startsWith("https://") &&
-                        !resourcePath.startsWith("data:")) {
-                        
-                        val resourceFile = File(baseDir, resourcePath)
-                        if (resourceFile.exists()) {
-                            val fileName = resourceFile.name
-                            val copiedFile = copyFileToAppStorage(resourceFile)
-                            resourceMapping[fileName] = copiedFile
-                        }
-                    }
-                }
-            }
+        val resolvedFile = resolveRelativePath(baseUri, requestPath) ?: return null
+        return try {
+            val mimeType = getMimeType(Uri.fromFile(resolvedFile))
+            val copiedFile = copyFileToAppStorage(resolvedFile)
+            WebResourceResponse(mimeType, "UTF-8", FileInputStream(copiedFile))
         } catch (e: Exception) {
             e.printStackTrace()
+            null
         }
     }
 
+    /** Resolves [relativePath] against the base HTML's directory, never leaving that directory. */
+    private fun resolveRelativePath(baseUri: Uri, relativePath: String): File? {
+        if (baseUri.scheme != "file") return null
+
+        val baseDir = canonicalOrNull(baseUri.path)?.parentFile ?: return null
+        val targetFile = canonicalOrNull(File(baseDir, relativePath.trimStart('/')).path)
+            ?: return null
+
+        return if (isInside(targetFile, baseDir) && targetFile.isFile) targetFile else null
+    }
+
+    private fun hashOf(text: String): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(text.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+            .take(16)
+
+    /** One cache folder per source, so identical file names from different places can't collide. */
+    private fun cacheFileFor(source: String, name: String): File =
+        File(File(cacheRoot(), hashOf(source)), name)
+
     private fun copyFileToAppStorage(file: File): File {
-        val outputFile = File(context.cacheDir, "local_files/${file.name}")
+        val outputFile = cacheFileFor(file.canonicalPath, file.name)
         outputFile.parentFile?.mkdirs()
-        
-        if (!outputFile.exists()) {
+
+        // Re-copy when the source changed, so edited resources aren't served stale.
+        if (!outputFile.exists() ||
+            file.lastModified() > outputFile.lastModified() ||
+            file.length() != outputFile.length()
+        ) {
             file.inputStream().use { input ->
                 outputFile.outputStream().use { output ->
                     input.copyTo(output)
                 }
             }
         }
-        
+
         return outputFile
+    }
+
+    private fun isCacheFresh(uri: Uri, cached: File): Boolean {
+        // content:// sources can't be checked cheaply; keep the per-session copy.
+        if (uri.scheme != "file") return true
+        val source = uri.path?.let { File(it) } ?: return true
+        return source.lastModified() <= cached.lastModified() && source.length() == cached.length()
     }
 
     private fun copyToAppStorage(uri: Uri, inputStream: InputStream): File {
         val cachedFile = copiedFiles[uri.toString()]
-        if (cachedFile != null && cachedFile.exists()) {
+        if (cachedFile != null && cachedFile.exists() && isCacheFresh(uri, cachedFile)) {
             inputStream.close()
             return cachedFile
         }
 
-        val fileName = getFileName(uri)
-        val outputFile = File(context.cacheDir, "local_files/$fileName")
+        val outputFile = cacheFileFor(uri.toString(), getFileName(uri))
         outputFile.parentFile?.mkdirs()
 
         FileOutputStream(outputFile).use { output ->
@@ -221,10 +244,8 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
             file.delete()
         }
         copiedFiles.clear()
-        resourceMapping.clear()
         baseHtmlUri = null
 
-        val localFilesDir = File(context.cacheDir, "local_files")
-        localFilesDir.deleteRecursively()
+        cacheRoot().deleteRecursively()
     }
 }
