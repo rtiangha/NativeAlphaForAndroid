@@ -16,7 +16,6 @@ import java.security.MessageDigest
 class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
 
     private val copiedFiles = mutableMapOf<String, File>()
-    private var baseHtmlUri: Uri? = null
 
     // What the page is allowed to read. Established by the first main-frame document:
     // for file:// the directory that document lives in, for content:// its authority.
@@ -44,13 +43,6 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
                 return forbiddenResponse()
             }
             return handleLocalFile(uri)
-        }
-
-        if (baseHtmlUri != null && (scheme == "http" || scheme == "https")) {
-            val relativeResource = tryResolveRelativeResource(uri)
-            if (relativeResource != null) {
-                return relativeResource
-            }
         }
 
         return super.shouldInterceptRequest(view, request)
@@ -108,10 +100,6 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
             val mimeType = getMimeType(uri)
             val file = copyToAppStorage(uri, inputStream)
 
-            if (mimeType == "text/html") {
-                baseHtmlUri = uri
-            }
-
             val fileInputStream = FileInputStream(file)
             return WebResourceResponse(mimeType, "UTF-8", fileInputStream)
 
@@ -119,32 +107,6 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
             e.printStackTrace()
             return null
         }
-    }
-
-    private fun tryResolveRelativeResource(requestUri: Uri): WebResourceResponse? {
-        val baseUri = baseHtmlUri ?: return null
-        val requestPath = requestUri.path ?: return null
-
-        val resolvedFile = resolveRelativePath(baseUri, requestPath) ?: return null
-        return try {
-            val mimeType = getMimeType(Uri.fromFile(resolvedFile))
-            val copiedFile = copyFileToAppStorage(resolvedFile)
-            WebResourceResponse(mimeType, "UTF-8", FileInputStream(copiedFile))
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-    }
-
-    /** Resolves [relativePath] against the base HTML's directory, never leaving that directory. */
-    private fun resolveRelativePath(baseUri: Uri, relativePath: String): File? {
-        if (baseUri.scheme != "file") return null
-
-        val baseDir = canonicalOrNull(baseUri.path)?.parentFile ?: return null
-        val targetFile = canonicalOrNull(File(baseDir, relativePath.trimStart('/')).path)
-            ?: return null
-
-        return if (isInside(targetFile, baseDir) && targetFile.isFile) targetFile else null
     }
 
     private fun hashOf(text: String): String =
@@ -156,25 +118,6 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
     /** One cache folder per source, so identical file names from different places can't collide. */
     private fun cacheFileFor(source: String, name: String): File =
         File(File(cacheRoot(), hashOf(source)), name)
-
-    private fun copyFileToAppStorage(file: File): File {
-        val outputFile = cacheFileFor(file.canonicalPath, file.name)
-        outputFile.parentFile?.mkdirs()
-
-        // Re-copy when the source changed, so edited resources aren't served stale.
-        if (!outputFile.exists() ||
-            file.lastModified() > outputFile.lastModified() ||
-            file.length() != outputFile.length()
-        ) {
-            file.inputStream().use { input ->
-                outputFile.outputStream().use { output ->
-                    input.copyTo(output)
-                }
-            }
-        }
-
-        return outputFile
-    }
 
     private fun isCacheFresh(uri: Uri, cached: File): Boolean {
         // content:// sources can't be checked cheaply; keep the per-session copy.
@@ -244,7 +187,6 @@ class LocalFileWebViewClient(private val context: Context) : WebViewClient() {
             file.delete()
         }
         copiedFiles.clear()
-        baseHtmlUri = null
 
         cacheRoot().deleteRecursively()
     }
