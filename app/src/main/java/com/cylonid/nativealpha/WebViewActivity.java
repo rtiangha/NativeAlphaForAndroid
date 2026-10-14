@@ -145,9 +145,8 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             // Toast is shown in getWebApp method
             finish();
         } else {
-            if(webapp.isBiometricProtection()) {
-                new BiometricPromptHelper(WebViewActivity.this).showPrompt(() -> setupWebView(), () -> finish(), getString(R.string.bioprompt_restricted_webapp));
-            }
+            // Biometric protection is enforced in onResume(), which hides the view until
+            // authentication succeeds (it also runs right after onCreate()).
             setupWebView();
         }
     }
@@ -533,6 +532,14 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         this.setDarkModeIfNeeded();
     }
 
+    /** True if targetHost is baseHost or a subdomain of it (exact label match, not substring). */
+    private static boolean isSameSite(String targetHost, String baseHost) {
+        if (targetHost == null || baseHost == null) return false;
+        targetHost = targetHost.toLowerCase(java.util.Locale.ROOT);
+        baseHost = baseHost.toLowerCase(java.util.Locale.ROOT);
+        return targetHost.equals(baseHost) || targetHost.endsWith("." + baseHost);
+    }
+
     private static String stripTrailingSlash(String s) {
         return (s != null && s.endsWith("/")) ? s.substring(0, s.length() - 1) : s;
     }
@@ -630,7 +637,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
 
     private void loadURL(final WebView view, final String url) {
         final WebApp webApp = DataManager.getInstance().getWebApp(webappID);
-        if (url.contains("http://") && !webApp.isAllowHttp()) {
+        if (url.toLowerCase(java.util.Locale.ROOT).startsWith("http://") && !webApp.isAllowHttp()) {
             final AlertDialog.Builder builder = new AlertDialog.Builder(WebViewActivity.this);
 
             builder.setTitle(getString(R.string.no_https_dialog_title));
@@ -953,8 +960,8 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
                 Uri uri = request.getUrl();
                 Uri webapp_uri = Uri.parse(webapp.getBaseUrl());
 
-                if(uri.getHost() != null) {
-                    if (!uri.getHost().endsWith(webapp_uri.getHost())) {
+                if (uri.getHost() != null && webapp_uri.getHost() != null) {
+                    if (!isSameSite(uri.getHost(), webapp_uri.getHost())) {
                         return new WebResourceResponse("text/plain", "utf-8", null);
                     }
                 }
@@ -993,6 +1000,9 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             builder.setTitle(getString(R.string.ssl_error_title));
             builder.setMessage(message);
             builder.setIcon(android.R.drawable.ic_dialog_alert);
+            // Dismissing the dialog (back / tap outside) must still answer the handler,
+            // otherwise the WebView waits forever.
+            builder.setOnCancelListener(dialog -> handler.cancel());
             builder.setPositiveButton(getString(android.R.string.cancel), (dialog, id) -> handler.cancel());
             builder.setNegativeButton(getString(R.string.load_anyway), (dialog, id) -> handler.proceed());
             final AlertDialog dialog = builder.create();
@@ -1038,7 +1048,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
                 String base_url = webapp.getBaseUrl();
                 Uri uri = Uri.parse(base_url);
                 String host = uri.getHost();
-                if (!url.contains(host)) {
+                if (host != null && !isSameSite(Uri.parse(url).getHost(), host)) {
                     view.getContext().startActivity(
                             new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                     return true;
