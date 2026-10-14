@@ -43,6 +43,7 @@ import android.widget.FrameLayout;
 import android.widget.PopupMenu;
 import android.widget.ProgressBar;
 
+import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -123,6 +124,15 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        // With predictive back enabled, onBackPressed() is no longer invoked by the system,
+        // so back navigation must go through the OnBackPressedDispatcher.
+        getOnBackPressedDispatcher().addCallback(this, new OnBackPressedCallback(true) {
+            @Override
+            public void handleOnBackPressed() {
+                handleBack();
+            }
+        });
 
         adblockLifecycleHelper = new AdblockLifecycleHelper(this);
         adblockLifecycleHelper.trySyncOperation(() -> adFilter = AdFilter.Companion.get(getApplicationContext()));
@@ -523,16 +533,28 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         this.setDarkModeIfNeeded();
     }
 
+    private static String stripTrailingSlash(String s) {
+        return (s != null && s.endsWith("/")) ? s.substring(0, s.length() - 1) : s;
+    }
+
+    // Still called directly by the two-finger swipe gesture and the context menu "Back" item.
     @Override
     public void onBackPressed() {
+        handleBack();
+    }
+
+    private void handleBack() {
         WebApp webapp = DataManager.getInstance().getWebApp(webappID);
         String currentUrl = wv.getUrl();
         String baseUrl = webapp.getBaseUrl();
 
         boolean canGoBack = wv.canGoBack();
-        boolean isAtBaseUrl = currentUrl != null && (currentUrl.equals(baseUrl) || currentUrl.startsWith(baseUrl + "/"));
+        // Only the exact base page (ignoring a trailing slash) counts as "at base";
+        // pages under the base URL must still be able to go back.
+        boolean isAtBaseUrl = currentUrl != null
+                && stripTrailingSlash(currentUrl).equals(stripTrailingSlash(baseUrl));
 
-        if(canGoBack && !isAtBaseUrl) {
+        if (canGoBack && !isAtBaseUrl) {
             wv.goBack();
             return;
         }
