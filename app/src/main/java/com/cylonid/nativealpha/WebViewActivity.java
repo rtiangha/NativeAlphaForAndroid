@@ -393,6 +393,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
                             }
                             return true;
                         }
+                        return false;
                     case MotionEvent.ACTION_MOVE:
                         if (mode == SWIPE) {
                             stopX = event.getX(0);
@@ -594,7 +595,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             new BiometricPromptHelper(WebViewActivity.this).showPrompt(() -> fullActivityView.setVisibility(View.VISIBLE), () -> finish(), getString(R.string.bioprompt_restricted_webapp));
         }
         if (webapp.isAutoreload()) {
-            reload_handler = new Handler();
+            reload_handler = new Handler(android.os.Looper.getMainLooper());
             reload();
         }
 
@@ -616,6 +617,22 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             reload_handler.removeCallbacksAndMessages(null);
             Log.d("CLEANUP", "Stopped reload handler");
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        if (reload_handler != null) {
+            reload_handler.removeCallbacksAndMessages(null);
+        }
+        if (wv != null) {
+            wv.stopLoading();
+            android.view.ViewParent parent = wv.getParent();
+            if (parent instanceof android.view.ViewGroup) {
+                ((android.view.ViewGroup) parent).removeView(wv);
+            }
+            wv.destroy();
+        }
+        super.onDestroy();
     }
 
     private void reload() {
@@ -938,7 +955,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
 
         @Override
         public void onPageFinished(WebView view, String url) {
-            if(url.equals("about:blank")) {
+            if ("about:blank".equals(url)) {
                 String langExtension = LocaleUtils.getFileEnding();
                 wv.loadUrl("file:///android_asset/errorSite/error_" + langExtension + ".html");
             }
