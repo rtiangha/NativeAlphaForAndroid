@@ -28,6 +28,8 @@ public class Const {
         ArrayList<AdblockConfig> list = new ArrayList<>();
         list.add(new AdblockConfig("Fanboy Ultimate List", "https://fanboy.co.nz/r/fanboy-ultimate.txt"));
         list.add(new AdblockConfig("Bypass Paywalls Clean", "https://gitflic.ru/project/magnolia1234/bypass-paywalls-clean-filters/blob/raw?file=bpc-paywall-filter.txt"));
+        list.add(new AdblockConfig("Anti-Paywall List", "https://raw.githubusercontent.com/liamengland1/miscfilters/master/antipaywall.txt"));
+        list.add(new AdblockConfig("Browse websites without logging in", "https://raw.githubusercontent.com/DandelionSprout/adfilt/refs/heads/master/BrowseWebsitesWithoutLoggingIn.txt"));
         return list;
     }
 }
