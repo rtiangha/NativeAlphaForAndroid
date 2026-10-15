@@ -12,10 +12,15 @@ import android.net.Uri
 import java.lang.NullPointerException
 
 object WebViewLauncher {
+    /** Set on launches that originate inside the app (not on home screen shortcuts). */
+    const val EXTRA_LAUNCHED_FROM_APP = "com.cylonid.nativealpha.LAUNCHED_FROM_APP"
+
     @JvmStatic
     fun startWebView(webapp: WebApp, c: Context) {
         try {
-            c.startActivity(createWebViewIntent(webapp, c))
+            val intent = createWebViewIntent(webapp, c)
+            intent?.putExtra(EXTRA_LAUNCHED_FROM_APP, true)
+            c.startActivity(intent)
         } catch (e: NullPointerException) {
             NotificationUtils.showInfoSnackbar(
                 c as AppCompatActivity,
@@ -27,9 +32,12 @@ object WebViewLauncher {
     }
 
     @JvmStatic
-    fun startWebViewInNewProcess(webapp: WebApp, a: Activity) {
+    @JvmOverloads
+    fun startWebViewInNewProcess(webapp: WebApp, a: Activity, launchedFromApp: Boolean = false) {
         try {
-            ProcessPhoenix.triggerRebirth(a, createWebViewIntent(webapp, a))
+            val intent = createWebViewIntent(webapp, a)
+            intent?.putExtra(EXTRA_LAUNCHED_FROM_APP, launchedFromApp)
+            ProcessPhoenix.triggerRebirth(a, intent)
         } catch (e: NullPointerException) {
             NotificationUtils.showInfoSnackbar(
                 a,

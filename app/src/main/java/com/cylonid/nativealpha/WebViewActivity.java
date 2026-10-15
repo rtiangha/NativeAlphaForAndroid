@@ -114,6 +114,9 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
     private boolean fallbackToDefaultLongClickBehaviour = false;
     private PopupMenu mPopupMenu = null;
     private String lastLongClickedLinkUrl = null;
+    // True when this web app was opened from inside the app (main list, swipe switching),
+    // false when it was launched directly (home screen shortcut).
+    private boolean launchedFromApp = false;
 
     private AdFilter adFilter;
 
@@ -123,6 +126,8 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        launchedFromApp = getIntent().getBooleanExtra(WebViewLauncher.EXTRA_LAUNCHED_FROM_APP, false);
 
         // With predictive back enabled, onBackPressed() is no longer invoked by the system,
         // so back navigation must go through the OnBackPressedDispatcher.
@@ -159,13 +164,13 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         boolean hasSandboxing = SandboxManager.getInstance() != null;
         // Sandboxed Web App is openend in main process using an old shortcut
         if (packageName.equals(processName) && webapp.isUseContainer() && hasSandboxing) {
-            WebViewLauncher.startWebViewInNewProcess(webapp, this);
+            WebViewLauncher.startWebViewInNewProcess(webapp, this, launchedFromApp);
         }
 
         if (!packageName.equals(processName) && hasSandboxing) {
             if (SandboxManager.getInstance().isSandboxUsedByAnotherApp(webapp)) {
                 SandboxManager.getInstance().unregisterWebAppFromSandbox(webapp.getContainerId());
-                WebViewLauncher.startWebViewInNewProcess(webapp, this);
+                WebViewLauncher.startWebViewInNewProcess(webapp, this, launchedFromApp);
             }
             try {
                 SandboxManager.getInstance().registerWebAppToSandbox(webapp);
@@ -571,7 +576,28 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             return;
         }
 
+        // A sandboxed web app launched directly (e.g. from the home screen) exits completely,
+        // instead of moving its task to the back and revealing the app's main menu.
+        boolean isSandboxProcess = !getPackageName().equals(Application.getProcessName());
+        if (isSandboxProcess && !launchedFromApp) {
+            // Closing the task alone lets Android focus whichever task is next, which can be the
+            // app's main menu. Go to the home screen first, then remove this task.
+            Intent home = new Intent(Intent.ACTION_MAIN)
+                    .addCategory(Intent.CATEGORY_HOME)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(home);
+            finishAndRemoveTask();
+            return;
+        }
+
         moveTaskToBack(true);
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        // An already-open web app can be brought to the front again by a different kind of launch.
+        launchedFromApp = intent.getBooleanExtra(WebViewLauncher.EXTRA_LAUNCHED_FROM_APP, false);
     }
 
     @Override
@@ -581,7 +607,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
 
         if (new_id != webappID) {
             WebApp new_webapp = DataManager.getInstance().getWebApp(new_id);
-            WebViewLauncher.startWebViewInNewProcess(new_webapp, this);
+            WebViewLauncher.startWebViewInNewProcess(new_webapp, this, launchedFromApp);
         }
 
         wv.onResume();
