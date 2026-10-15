@@ -22,14 +22,17 @@ import com.google.gson.reflect.TypeToken;
 import com.himanshurawat.hasher.HashType;
 import com.himanshurawat.hasher.Hasher;
 
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InvalidClassException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.io.ObjectStreamClass;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 import static android.content.Context.MODE_PRIVATE;
@@ -97,7 +100,7 @@ public class DataManager {
     public void saveWebAppData() {
         Utility.Assert(App.getAppContext() != null, "App.getAppContext() null before saving sharedpref");
 
-        appdata = App.getAppContext().getSharedPreferences(SHARED_PREF_KEY, MODE_PRIVATE);
+        appdata = getAppDataPrefs();
         SharedPreferences.Editor editor = appdata.edit();
         Gson gson = new Gson();
         String json = gson.toJson(websites);
@@ -123,6 +126,20 @@ public class DataManager {
 
     public void setLastShownUpdate(int newValue) {
         getGeneralInfo().edit().putInt(LAST_SHOWN_UPDATE, newValue).apply();
+    }
+
+    /**
+     * The app data is read and written by several processes (the main process and the sandbox processes that
+     * host the web apps). Plain MODE_PRIVATE preferences are cached per process, so a process would keep
+     * working with, and later write back, an outdated snapshot. MODE_MULTI_PROCESS makes
+     * getSharedPreferences() reload the file when another process has changed it. It is deprecated and not a
+     * transaction (two processes writing at the very same moment can still overwrite each other), but it
+     * removes the long-lived stale-snapshot problem.
+     */
+    @SuppressWarnings("deprecation")
+    private SharedPreferences getAppDataPrefs() {
+        Utility.Assert(App.getAppContext() != null, "App.getAppContext() null before accessing sharedpref");
+        return App.getAppContext().getSharedPreferences(SHARED_PREF_KEY, MODE_PRIVATE | android.content.Context.MODE_MULTI_PROCESS);
     }
 
     private SharedPreferences getGeneralInfo() {
@@ -152,7 +169,7 @@ public class DataManager {
     public void loadAppData() {
         Utility.Assert(App.getAppContext() != null, "App.getAppContext() null before loading sharedpref");
 
-        appdata = App.getAppContext().getSharedPreferences(SHARED_PREF_KEY, MODE_PRIVATE);
+        appdata = getAppDataPrefs();
         //Webapp data
         if (appdata.contains(shared_pref_webappdata)) {
             GsonBuilder gsonBuilder = new GsonBuilder();
@@ -202,7 +219,7 @@ public class DataManager {
     public void saveGlobalSettings() {
         Utility.Assert(App.getAppContext() != null, "App.getAppContext() null before saving appdata to sharedpref");
 
-        appdata = App.getAppContext().getSharedPreferences(SHARED_PREF_KEY, MODE_PRIVATE);
+        appdata = getAppDataPrefs();
         SharedPreferences.Editor editor = appdata.edit();
 
         Gson gson = new Gson();
@@ -283,10 +300,10 @@ public class DataManager {
 
     public boolean saveSharedPreferencesToFile(Uri uri) {
         boolean result = false;
-        try(FileOutputStream fos = (FileOutputStream) App.getAppContext().getContentResolver().openOutputStream(uri);
+        try(OutputStream fos = App.getAppContext().getContentResolver().openOutputStream(uri);
             Base64OutputStream b64os = new Base64OutputStream(fos, Base64.DEFAULT);
             ObjectOutputStream oos = new ObjectOutputStream(b64os)) {
-            appdata = App.getAppContext().getSharedPreferences(SHARED_PREF_KEY, MODE_PRIVATE);
+            appdata = getAppDataPrefs();
             TreeMap<String, ?> shared_pref_map = new TreeMap<>(appdata.getAll());
 
             oos.writeObject(Hasher.Companion.hash(shared_pref_map.toString(), HashType.SHA_256));
@@ -302,11 +319,11 @@ public class DataManager {
     @SuppressWarnings({ "unchecked" })
     public boolean loadSharedPreferencesFromFile(Uri uri){
         boolean result = false;
-        try (FileInputStream fis = (FileInputStream) App.getAppContext().getContentResolver().openInputStream(uri);
+        try (InputStream fis = App.getAppContext().getContentResolver().openInputStream(uri);
              Base64InputStream b64is = new Base64InputStream(fis, Base64.DEFAULT);
-             ObjectInputStream ois = new ObjectInputStream(b64is)) {
+             ObjectInputStream ois = new AllowListObjectInputStream(b64is)) {
 
-            SharedPreferences.Editor prefEdit = App.getAppContext().getSharedPreferences(SHARED_PREF_KEY, MODE_PRIVATE).edit();
+            SharedPreferences.Editor prefEdit = getAppDataPrefs().edit();
             prefEdit.clear();
             String checksum = (String) ois.readObject();
             TreeMap<String, ?> shared_pref_map = ((TreeMap<String, ?>) ois.readObject());
@@ -332,12 +349,35 @@ public class DataManager {
             prefEdit.apply();
             result = true;
 
-        } catch (InvalidChecksumException | IOException | ClassNotFoundException e) {
+        } catch (Exception e) {
+            // Includes InvalidChecksumException, IOException, ClassNotFoundException and malformed files (e.g. ClassCastException)
             e.printStackTrace();
         }
 
 
         return result;
+    }
+
+    /**
+     * Backups are Java-serialized. Only the few types a preferences backup can contain are accepted, so that a
+     * crafted backup file cannot make the app instantiate arbitrary classes while it is being read.
+     */
+    private static class AllowListObjectInputStream extends ObjectInputStream {
+        private static final Set<String> ALLOWED = Set.of(
+                "java.util.TreeMap", "java.util.HashSet", "java.lang.String",
+                "java.lang.Boolean", "java.lang.Integer", "java.lang.Long", "java.lang.Float", "java.lang.Number");
+
+        AllowListObjectInputStream(InputStream in) throws IOException {
+            super(in);
+        }
+
+        @Override
+        protected Class<?> resolveClass(ObjectStreamClass desc) throws IOException, ClassNotFoundException {
+            if (!ALLOWED.contains(desc.getName())) {
+                throw new InvalidClassException(desc.getName(), "Class is not allowed in a settings backup");
+            }
+            return super.resolveClass(desc);
+        }
     }
 
     private String checkDataFormat(int dataFormat, String jsonInput) {

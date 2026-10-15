@@ -704,7 +704,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             builder.setPositiveButton(getString(R.string.no_https_dialog_accept), (dialog, id) -> {
                 webApp.setAllowHttp(true);
                 webApp.setOverrideGlobalSettings(true);
-                DataManager.getInstance().saveWebAppData();
+                DataManager.getInstance().replaceWebApp(webApp);
                 view.loadUrl(url, CUSTOM_HEADERS);
             });
             builder.setNegativeButton(getString(android.R.string.cancel), (dialog, id) -> finish());
