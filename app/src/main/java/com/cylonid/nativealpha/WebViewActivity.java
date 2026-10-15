@@ -141,7 +141,9 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         adblockLifecycleHelper = new AdblockLifecycleHelper(this);
         adblockLifecycleHelper.trySyncOperation(() -> adFilter = AdFilter.Companion.get(getApplicationContext()));
 
-        adblockProviderApiHelper = new AdblockProviderApiHelper(adFilter);
+        // adFilter stays null if the previous run was flagged as an adblock crash (initialisation is skipped then).
+        // In that case adblock is simply unavailable for this launch.
+        adblockProviderApiHelper = adFilter != null ? new AdblockProviderApiHelper(adFilter) : null;
         webappID = getIntent().getIntExtra(Const.INTENT_WEBAPPID, -1);
         EntryPointUtils.entryPointReached(this);
         webapp = DataManager.getInstance().getWebApp(webappID);
@@ -192,7 +194,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         progressBar = findViewById(R.id.progressBar);
 
         List<AdblockConfig> adblockConfigs = DataManager.getInstance().getSettings().getGlobalWebApp().getAdBlockSettings();
-        if (webapp.isUseAdblock() && !adblockConfigs.isEmpty()) {
+        if (webapp.isUseAdblock() && !adblockConfigs.isEmpty() && adFilter != null) {
             wv.setVisibility(View.GONE);
             wv = findViewById(R.id.adblockwebview);
             wv.setVisibility(View.VISIBLE);
@@ -204,7 +206,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             );
 
             adFilter.getViewModel().getEnabledFilterCount().observe(this, count -> {
-                if (count == adblockConfigs.size()) {
+                if (count >= adblockConfigs.size()) {
                     adblockLifecycleHelper.afterAdblockOperation();
                 }
             });
@@ -522,8 +524,11 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
                 startActivity(intent);
                 return true;
             } else if (id == R.id.cmShowAdblockProviders) {
+                if (adFilter == null || adFilter.getViewModel().getFilters().getValue() == null) {
+                    return true;
+                }
                 StringBuilder message = new StringBuilder();
-                for (Map.Entry<String, Filter> entry : Objects.requireNonNull(AdFilter.Companion.get().getViewModel().getFilters().getValue()).entrySet()) {
+                for (Map.Entry<String, Filter> entry : adFilter.getViewModel().getFilters().getValue().entrySet()) {
                     Filter filter = entry.getValue();
                     message.append(filter.getUrl()).append(" has downloaded: ").append(filter.hasDownloaded()).append("\n\n");
                 }
@@ -579,6 +584,9 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         // A sandboxed web app launched directly (e.g. from the home screen) exits completely,
         // instead of moving its task to the back and revealing the app's main menu.
         boolean isSandboxProcess = !getPackageName().equals(Application.getProcessName());
+        Log.d("BackDebug", "base page reached: sandbox=" + isSandboxProcess
+                + ", launchedFromApp=" + launchedFromApp
+                + ", taskId=" + getTaskId() + ", isTaskRoot=" + isTaskRoot());
         if (isSandboxProcess && !launchedFromApp) {
             // Closing the task alone lets Android focus whichever task is next, which can be the
             // app's main menu. Go to the home screen first, then remove this task.
@@ -647,6 +655,9 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
 
     @Override
     protected void onDestroy() {
+        if (isFinishing() && adblockLifecycleHelper != null) {
+            adblockLifecycleHelper.afterAdblockOperation();
+        }
         if (reload_handler != null) {
             reload_handler.removeCallbacksAndMessages(null);
         }
@@ -972,7 +983,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
 
     private class CustomBrowser extends WebViewClient {
 
-        private AdFilter adFilter = AdFilter.Companion.get();
+        private final AdFilter adFilter = WebViewActivity.this.adFilter;
 
         @Override
         public void onReceivedHttpAuthRequest(WebView view, HttpAuthHandler handler, String host, String realm) {
@@ -991,7 +1002,9 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
 
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
-            adFilter.performScript(view, url);
+            if (adFilter != null) {
+                adFilter.performScript(view, url);
+            }
             super.onPageStarted(view, url, favicon);
         }
 
@@ -1000,7 +1013,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
             if(urlOnFirstPageload.equals("")) urlOnFirstPageload = request.getUrl().toString();
 
-            if(webapp.isUseAdblock()) {
+            if (webapp.isUseAdblock() && adFilter != null) {
                 return (adFilter.shouldIntercept(view, request)).getResourceResponse();
             }
             if (webapp.isBlockThirdPartyRequests()) {

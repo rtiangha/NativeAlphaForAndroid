@@ -44,7 +44,6 @@ public class DataManager {
     private static final String GENERAL_INFO = "com.cylonid.nativealpha.GENERAL_INFO";
     public static final String EULA_ACCEPTED = "eulaAccepted";
 
-    public static final String ADBLOCK_CRASH = "adblockCrash";
     public static final String LAST_SHOWN_UPDATE = "lastShownUpdate";
     public static final String DATA_FORMAT = "dataFormat";
 
@@ -114,13 +113,9 @@ public class DataManager {
         return getGeneralInfo().getBoolean(EULA_ACCEPTED, false);
     }
 
-    public boolean getHasAdblockCrashed() { return getGeneralInfo().getBoolean(ADBLOCK_CRASH, false);}
-
     public int getLastShownUpdate() {
         return getGeneralInfo().getInt(LAST_SHOWN_UPDATE, 0);
     }
-
-    public void setHasAdblockCrashed(boolean newValue) {        getGeneralInfo().edit().putBoolean(ADBLOCK_CRASH, newValue).apply(); }
 
     public void setEulaData(boolean newValue) {
         getGeneralInfo().edit().putBoolean(EULA_ACCEPTED, newValue).apply();
