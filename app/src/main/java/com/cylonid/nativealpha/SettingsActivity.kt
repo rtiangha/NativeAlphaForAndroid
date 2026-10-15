@@ -2,11 +2,13 @@ package com.cylonid.nativealpha
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.webkit.CookieManager
 import android.webkit.WebStorage
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.databinding.DataBindingUtil
 import com.cylonid.nativealpha.activities.AdblockConfigActivity
@@ -23,6 +25,16 @@ import java.util.Date
 import java.util.Locale
 
 class SettingsActivity : ToolbarBaseActivity<GlobalSettingsBinding>() {
+
+    private val exportSettingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) onExportFileChosen(result.data?.data)
+        }
+
+    private val importSettingsLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) onImportFileChosen(result.data?.data)
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,7 +76,7 @@ class SettingsActivity : ToolbarBaseActivity<GlobalSettingsBinding>() {
             val currentDateTime = sdf.format(Date())
             intent.putExtra(Intent.EXTRA_TITLE, "NativeAlpha_$currentDateTime")
             try {
-                startActivityForResult(intent, Const.CODE_WRITE_FILE)
+                exportSettingsLauncher.launch(intent)
             } catch (e: ActivityNotFoundException) {
                 NotificationUtils.showInfoSnackbar(
                     this@SettingsActivity,
@@ -78,9 +90,8 @@ class SettingsActivity : ToolbarBaseActivity<GlobalSettingsBinding>() {
         binding.btnImportSettings.setOnClickListener { v: View? ->
             val intent = Intent().setType("*/*").setAction(Intent.ACTION_GET_CONTENT)
             try {
-                startActivityForResult(
-                    Intent.createChooser(intent, "Select a file"),
-                    Const.CODE_OPEN_FILE
+                importSettingsLauncher.launch(
+                    Intent.createChooser(intent, "Select a file")
                 )
             } catch (e: ActivityNotFoundException) {
                 NotificationUtils.showInfoSnackbar(
@@ -106,48 +117,42 @@ class SettingsActivity : ToolbarBaseActivity<GlobalSettingsBinding>() {
         return GlobalSettingsBinding.inflate(layoutInflater)
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode == Const.CODE_WRITE_FILE && resultCode == RESULT_OK) {
-            val uri = data?.data
+    private fun onExportFileChosen(uri: Uri?) {
+        DataManager.getInstance()
+            .saveGlobalSettings() //Needed to write legacy settings to new XML
 
-            DataManager.getInstance()
-                .saveGlobalSettings() //Needed to write legacy settings to new XML
-
-            if (!DataManager.getInstance().saveSharedPreferencesToFile(uri)) {
-                NotificationUtils.showInfoSnackbar(
-                    this,
-                    getString(R.string.export_failed),
-                    Snackbar.LENGTH_LONG
-                )
-            } else {
-                NotificationUtils.showInfoSnackbar(
-                    this,
-                    getString(R.string.export_success),
-                    Snackbar.LENGTH_SHORT
-                )
-            }
+        if (!DataManager.getInstance().saveSharedPreferencesToFile(uri)) {
+            NotificationUtils.showInfoSnackbar(
+                this,
+                getString(R.string.export_failed),
+                Snackbar.LENGTH_LONG
+            )
+        } else {
+            NotificationUtils.showInfoSnackbar(
+                this,
+                getString(R.string.export_success),
+                Snackbar.LENGTH_SHORT
+            )
         }
-        if (requestCode == Const.CODE_OPEN_FILE && resultCode == RESULT_OK) {
-            val uri = data?.data
+    }
 
-            if (!DataManager.getInstance().loadSharedPreferencesFromFile(uri)) {
-                NotificationUtils.showInfoSnackbar(
-                    this,
-                    getString(R.string.import_failed),
-                    Snackbar.LENGTH_LONG
-                )
-            } else {
-                val i = Intent(this@SettingsActivity, MainActivity::class.java)
+    private fun onImportFileChosen(uri: Uri?) {
+        if (!DataManager.getInstance().loadSharedPreferencesFromFile(uri)) {
+            NotificationUtils.showInfoSnackbar(
+                this,
+                getString(R.string.import_failed),
+                Snackbar.LENGTH_LONG
+            )
+        } else {
+            val i = Intent(this@SettingsActivity, MainActivity::class.java)
 
-                WebStorage.getInstance().deleteAllData()
-                CookieManager.getInstance().removeAllCookies(null)
+            WebStorage.getInstance().deleteAllData()
+            CookieManager.getInstance().removeAllCookies(null)
 
-                DataManager.getInstance().loadAppData()
-                i.putExtra(Const.INTENT_BACKUP_RESTORED, true)
-                finish()
-                startActivity(i)
-            }
+            DataManager.getInstance().loadAppData()
+            i.putExtra(Const.INTENT_BACKUP_RESTORED, true)
+            finish()
+            startActivity(i)
         }
     }
 }

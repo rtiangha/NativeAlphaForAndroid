@@ -6,7 +6,6 @@ import android.os.Bundle
 import androidx.fragment.app.Fragment
 import android.view.View
 import androidx.appcompat.app.AlertDialog
-import androidx.core.content.ContextCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.cylonid.nativealpha.R
@@ -72,7 +71,7 @@ class WebAppListFragment : Fragment(R.layout.fragment_web_app_list) {
                 )
                 intent.putExtra(Const.INTENT_WEBAPPID, item.ID)
                 intent.setAction(Intent.ACTION_VIEW)
-                context?.let { ContextCompat.startActivity(it, intent, null) }
+                context?.startActivity(intent)
                 return true
             }
             return false
