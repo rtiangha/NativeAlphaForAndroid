@@ -20,7 +20,8 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-
+# Rules for AdblockAndroid
+-keep class io.github.edsuns.adfilter.** { *; }
 # ---------------------------------------------------------------------------
 # Readable stack traces for release builds (use with build/outputs/mapping/.../mapping.txt)
 # ---------------------------------------------------------------------------
