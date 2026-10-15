@@ -14,6 +14,8 @@ internal class AdblockProviderApiHelper(private val adFilterProvider: AdFilter) 
             if (setFilter == null) {
                 setFilter = adFilterProvider.viewModel.addFilter(config.label, config.value)
                 adFilterProvider.viewModel.download(setFilter.id)
+                // Freshly added: already downloading, don't start a second concurrent download below
+                continue
             }
             if (DateUtils.isOlderThanDays(setFilter.updateTime, 10)) {
                 adFilterProvider.viewModel.download(setFilter.id)
