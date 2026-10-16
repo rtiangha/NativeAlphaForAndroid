@@ -29,6 +29,15 @@ internal class AdblockProviderApiHelper(private val adFilterProvider: AdFilter) 
         }
     }
 
+    /** True if every configured list exists and was updated recently, i.e. nothing is left to download. */
+    fun isUpToDate(settings: List<AdblockConfig>): Boolean {
+        val map = transformToMapWithUrlKey(adFilterProvider.viewModel.filters.value ?: emptyMap())
+        return settings.all { config ->
+            val filter = map[config.value]
+            filter != null && !DateUtils.isOlderThanDays(filter.updateTime, 10)
+        }
+    }
+
     private fun transformToMapWithUrlKey(originalMap: Map<String, Filter>): Map<String, Filter> {
         val urlBasedMap: HashMap<String, Filter> = HashMap()
         for ((_, value) in originalMap) {

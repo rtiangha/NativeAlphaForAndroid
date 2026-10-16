@@ -200,7 +200,14 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             wv.setVisibility(View.VISIBLE);
 
             adFilter.setupWebView(wv);
-            adblockLifecycleHelper.beforeAdblockOperation(() -> adblockProviderApiHelper.synchronizeAdblockProviderWithSettings(adblockConfigs));
+            // Sandboxes run in separate processes but share the filter files: only one process may sync (download)
+            // the lists at a time. Others skip the sync and use the lists that are already on disk.
+            adblockLifecycleHelper.syncListsIfNoOtherProcessIs(() -> adblockProviderApiHelper.synchronizeAdblockProviderWithSettings(adblockConfigs));
+            adFilter.getViewModel().getFilters().observe(this, filters -> {
+                if (adblockProviderApiHelper.isUpToDate(adblockConfigs)) {
+                    adblockLifecycleHelper.releaseSyncLock();
+                }
+            });
 
             adFilter.getViewModel().getOnDirty().observe(this, none -> wv.clearCache(false)
             );

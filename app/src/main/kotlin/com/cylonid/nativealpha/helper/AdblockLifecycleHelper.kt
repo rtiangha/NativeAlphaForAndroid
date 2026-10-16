@@ -47,6 +47,21 @@ class AdblockLifecycleHelper(private val activity: Activity) {
         hasCrashed = false
     }
 
+    /**
+     * Runs the filter list sync unless another process is already syncing (web apps in different sandboxes would
+     * otherwise download the same lists at the same time). Returns false if the sync was skipped.
+     */
+    fun syncListsIfNoOtherProcessIs(callback: AdblockLifecycleCallback): Boolean {
+        if (!AdblockSyncLock.tryAcquire(activity)) return false
+        beforeAdblockOperation(callback)
+        return true
+    }
+
+    /** Called once all lists are up to date, so other processes may sync again. */
+    fun releaseSyncLock() {
+        AdblockSyncLock.release()
+    }
+
     private fun showWarningDialog() {
         AlertDialog.Builder(activity)
             .setMessage(activity.getString(R.string.adblock_warning_text))
