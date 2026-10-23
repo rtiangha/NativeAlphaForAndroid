@@ -7,6 +7,7 @@ import android.app.Application
 import android.content.Context
 import android.content.DialogInterface
 import androidx.appcompat.app.AlertDialog
+import java.util.concurrent.atomic.AtomicInteger
 import com.cylonid.nativealpha.R
 import com.cylonid.nativealpha.model.DataManager
 
@@ -33,18 +34,49 @@ class AdblockLifecycleHelper(private val activity: Activity) {
         afterAdblockOperation()
     }
 
+    // True while this helper (i.e. this activity) has an adblock operation in progress.
+    private var active = false
+
     fun beforeAdblockOperation(callback: AdblockLifecycleCallback) {
-        if (hasCrashed) {
+        // A set flag only means "the previous run crashed" if no operation of this still running process is behind
+        // it. Otherwise a second web app opened in the same process while the first one is still syncing would be
+        // reported as a crash.
+        if (hasCrashed && activeOperations.get() == 0) {
             showWarningDialog()
             hasCrashed = false
             return
+        }
+        if (!active) {
+            active = true
+            activeOperations.incrementAndGet()
         }
         hasCrashed = true
         callback.execute()
     }
 
+    /** Safe to call repeatedly; the flag is only cleared when the last operation in this process has ended. */
     fun afterAdblockOperation() {
-        hasCrashed = false
+        if (!active) return
+        active = false
+        if (activeOperations.decrementAndGet() <= 0) {
+            activeOperations.set(0)
+            hasCrashed = false
+        }
+    }
+
+    /**
+     * Runs the filter list sync unless another process is already syncing (web apps in different sandboxes would
+     * otherwise download the same lists at the same time). Returns false if the sync was skipped.
+     */
+    fun syncListsIfNoOtherProcessIs(callback: AdblockLifecycleCallback): Boolean {
+        if (!AdblockSyncLock.tryAcquire(activity)) return false
+        beforeAdblockOperation(callback)
+        return true
+    }
+
+    /** Called once all lists are up to date, so other processes may sync again. */
+    fun releaseSyncLock() {
+        AdblockSyncLock.release()
     }
 
     private fun showWarningDialog() {
@@ -69,6 +101,9 @@ class AdblockLifecycleHelper(private val activity: Activity) {
 
     private companion object {
         const val KEY_CRASHED = "adblockCrash"
+
+        // Adblock operations currently in progress in this process
+        val activeOperations = AtomicInteger(0)
     }
 
 }
