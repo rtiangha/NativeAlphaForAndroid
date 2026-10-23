@@ -200,7 +200,14 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             wv.setVisibility(View.VISIBLE);
 
             adFilter.setupWebView(wv);
-            adblockLifecycleHelper.beforeAdblockOperation(() -> adblockProviderApiHelper.synchronizeAdblockProviderWithSettings(adblockConfigs));
+            // Sandboxes run in separate processes but share the filter files: only one process may sync (download)
+            // the lists at a time. Others skip the sync and use the lists that are already on disk.
+            adblockLifecycleHelper.syncListsIfNoOtherProcessIs(() -> adblockProviderApiHelper.synchronizeAdblockProviderWithSettings(adblockConfigs));
+            adFilter.getViewModel().getFilters().observe(this, filters -> {
+                if (adblockProviderApiHelper.isUpToDate(adblockConfigs)) {
+                    adblockLifecycleHelper.releaseSyncLock();
+                }
+            });
 
             adFilter.getViewModel().getOnDirty().observe(this, none -> wv.clearCache(false)
             );
@@ -654,8 +661,18 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
     }
 
     @Override
+    protected void onStop() {
+        super.onStop();
+        // Leaving the app is not a crash. Without this, swiping the app away while a list sync is still running
+        // would be reported as an adblock crash on the next launch.
+        if (adblockLifecycleHelper != null) {
+            adblockLifecycleHelper.afterAdblockOperation();
+        }
+    }
+
+    @Override
     protected void onDestroy() {
-        if (isFinishing() && adblockLifecycleHelper != null) {
+        if (adblockLifecycleHelper != null) {
             adblockLifecycleHelper.afterAdblockOperation();
         }
         if (reload_handler != null) {
