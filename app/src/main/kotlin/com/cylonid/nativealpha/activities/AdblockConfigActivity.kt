@@ -7,12 +7,14 @@ import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.LayoutInflater
+import android.view.View
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.cylonid.nativealpha.R
 import com.cylonid.nativealpha.databinding.AdblockConfigActivityBinding
 import com.cylonid.nativealpha.databinding.AddAdblockConfigDialogBinding
 import com.cylonid.nativealpha.fragments.adblocklist.AdblockListFragment
+import com.cylonid.nativealpha.helper.AdblockListDownloader
 import com.cylonid.nativealpha.model.AdblockConfig
 import com.cylonid.nativealpha.model.DataManager
 import com.cylonid.nativealpha.util.Const
@@ -22,6 +24,7 @@ import com.cylonid.nativealpha.util.ProcessUtils
 
 class AdblockConfigActivity : ToolbarBaseActivity<AdblockConfigActivityBinding>() {
     private lateinit var adblockListFragment: AdblockListFragment
+    private val listDownloader by lazy { AdblockListDownloader(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -37,6 +40,12 @@ class AdblockConfigActivity : ToolbarBaseActivity<AdblockConfigActivityBinding>(
             updateAdblockList()
         }
 
+        binding.btnDownloadFilters.setOnClickListener {
+            listDownloader.start(DataManager.getInstance().settings.globalWebApp.adBlockSettings) { progress ->
+                showDownloadProgress(progress)
+            }
+        }
+
         setToolbarTitle(getString(R.string.adblock_config))
 
         adblockListFragment =
@@ -49,6 +58,32 @@ class AdblockConfigActivity : ToolbarBaseActivity<AdblockConfigActivityBinding>(
 
     private fun updateAdblockList() {
         adblockListFragment.updateAdblockList()
+    }
+
+    private fun showDownloadProgress(p: AdblockListDownloader.Progress) {
+        binding.btnDownloadFilters.isEnabled = p.state != AdblockListDownloader.State.RUNNING
+
+        binding.downloadProgress.visibility = if (p.lists.isEmpty()) View.GONE else View.VISIBLE
+        binding.downloadProgress.max = maxOf(p.total, 1)
+        binding.downloadProgress.progress = p.done
+
+        val summary = when (p.state) {
+            AdblockListDownloader.State.RUNNING -> getString(R.string.adblock_dl_running, p.done, p.total)
+            AdblockListDownloader.State.FINISHED -> getString(R.string.adblock_dl_finished, p.total)
+            AdblockListDownloader.State.TIMED_OUT -> getString(R.string.adblock_dl_timeout, p.done, p.total)
+            AdblockListDownloader.State.BUSY_ELSEWHERE -> getString(R.string.adblock_dl_busy)
+            AdblockListDownloader.State.UNAVAILABLE -> getString(R.string.adblock_dl_unavailable)
+            AdblockListDownloader.State.NOTHING_CONFIGURED -> getString(R.string.adblock_dl_none)
+        }
+        val details = p.lists.joinToString("\n") { (if (it.done) "✓ " else "… ") + it.label }
+
+        binding.downloadStatus.visibility = View.VISIBLE
+        binding.downloadStatus.text = if (details.isEmpty()) summary else "$summary\n$details"
+    }
+
+    override fun onDestroy() {
+        listDownloader.cancel()
+        super.onDestroy()
     }
 
     private fun showAddAdblockDialog() {
