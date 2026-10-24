@@ -67,11 +67,13 @@ class AdblockConfigActivity : ToolbarBaseActivity<AdblockConfigActivityBinding>(
         // Animated while nothing has finished yet, so a waiting download doesn't look like a frozen, empty bar
         binding.downloadProgress.isIndeterminate = p.state == AdblockListDownloader.State.RUNNING && p.done == 0
         binding.downloadProgress.max = maxOf(p.total, 1)
-        binding.downloadProgress.progress = p.done
+        binding.downloadProgress.progress = p.done + p.failed
 
         val summary = when (p.state) {
             AdblockListDownloader.State.RUNNING -> getString(R.string.adblock_dl_running, p.done, p.total, p.elapsedSeconds)
             AdblockListDownloader.State.FINISHED -> getString(R.string.adblock_dl_finished, p.total)
+            AdblockListDownloader.State.FINISHED_WITH_ERRORS ->
+                getString(R.string.adblock_dl_finished_errors, p.done, p.total, p.failed)
             AdblockListDownloader.State.TIMED_OUT -> getString(R.string.adblock_dl_timeout, p.done, p.total)
             AdblockListDownloader.State.BUSY_ELSEWHERE -> getString(R.string.adblock_dl_busy)
             AdblockListDownloader.State.UNAVAILABLE -> getString(R.string.adblock_dl_unavailable)
@@ -83,7 +85,6 @@ class AdblockConfigActivity : ToolbarBaseActivity<AdblockConfigActivityBinding>(
         binding.downloadStatus.text = if (details.isEmpty()) summary else "$summary\n$details"
     }
 
-    // The "last updated" time doubles as a diagnostic: it only moves when a list was really downloaded
     private fun describe(item: AdblockListDownloader.ListStatus): String {
         val age = if (item.updateTime <= 0L) {
             getString(R.string.adblock_dl_never)
@@ -94,7 +95,28 @@ class AdblockConfigActivity : ToolbarBaseActivity<AdblockConfigActivityBinding>(
                 android.text.format.DateUtils.SECOND_IN_MILLIS
             ).toString()
         }
-        return (if (item.done) "✓ " else "… ") + item.label + " · " + age
+        val symbol = when (item.itemState) {
+            AdblockListDownloader.ItemState.DONE -> "✓"
+            AdblockListDownloader.ItemState.FAILED, AdblockListDownloader.ItemState.NOT_STARTED -> "✗"
+            else -> "…"
+        }
+        val stateText = getString(
+            when (item.itemState) {
+                AdblockListDownloader.ItemState.WAITING -> R.string.adblock_dl_item_waiting
+                AdblockListDownloader.ItemState.DOWNLOADING -> R.string.adblock_dl_item_downloading
+                AdblockListDownloader.ItemState.INSTALLING -> R.string.adblock_dl_item_installing
+                AdblockListDownloader.ItemState.DONE -> R.string.adblock_dl_item_updated
+                AdblockListDownloader.ItemState.FAILED -> R.string.adblock_dl_item_failed
+                AdblockListDownloader.ItemState.NOT_STARTED -> R.string.adblock_dl_item_not_started
+            }
+        )
+        val text = "$symbol ${item.label} · $stateText"
+        return when {
+            // Installed, but nothing was loaded: the library silently rejects lists without a license/checksum header
+            item.done && item.rules == 0 -> "$text · ${getString(R.string.adblock_dl_item_no_rules)}"
+            item.done -> text
+            else -> "$text · ${getString(R.string.adblock_dl_last_updated, age)}"
+        }
     }
 
     override fun onDestroy() {

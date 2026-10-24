@@ -7,5 +7,14 @@
     <string name="adblock_dl_busy">The filter lists are already being updated. Try again in a moment.</string>
     <string name="adblock_dl_unavailable">Adblock isn’t available right now.</string>
     <string name="adblock_dl_never">never</string>
+    <string name="adblock_dl_finished_errors">%1$d of %2$d lists updated, %3$d failed. A list server may be slow or down.</string>
+    <string name="adblock_dl_item_waiting">waiting</string>
+    <string name="adblock_dl_item_downloading">downloading</string>
+    <string name="adblock_dl_item_installing">installing</string>
+    <string name="adblock_dl_item_updated">updated</string>
+    <string name="adblock_dl_item_failed">failed</string>
+    <string name="adblock_dl_item_not_started">didn’t start</string>
+    <string name="adblock_dl_item_no_rules">0 rules loaded (list rejected or empty)</string>
+    <string name="adblock_dl_last_updated">last updated: %1$s</string>
     <string name="adblock_dl_none">No filter lists are configured.</string>
 </resources>

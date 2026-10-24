@@ -8,19 +8,32 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
 import com.cylonid.nativealpha.model.AdblockConfig
 import io.github.edsuns.adfilter.AdFilter
+import io.github.edsuns.adfilter.DownloadState
 import io.github.edsuns.adfilter.Filter
 
 /**
  * Manually downloads all configured filter lists and reports progress. Must be used on the main thread.
  *
- * A list counts as finished once its update time is newer than the moment the download was started. Only one
- * process may download the lists at a time, so this shares the lock used by the automatic sync.
+ * The library downloads a list with two chained WorkManager jobs (download, then install) and mirrors their state in
+ * [Filter.downloadState]; that state is what is reported here. Only one process may download the lists at a time, so
+ * this shares the lock used by the automatic sync.
  */
 class AdblockListDownloader(context: Context) {
 
-    enum class State { RUNNING, FINISHED, TIMED_OUT, BUSY_ELSEWHERE, UNAVAILABLE, NOTHING_CONFIGURED }
+    enum class State { RUNNING, FINISHED, FINISHED_WITH_ERRORS, TIMED_OUT, BUSY_ELSEWHERE, UNAVAILABLE, NOTHING_CONFIGURED }
 
-    data class ListStatus(val label: String, val done: Boolean, val updateTime: Long = 0L)
+    enum class ItemState { WAITING, DOWNLOADING, INSTALLING, DONE, FAILED, NOT_STARTED }
+
+    data class ListStatus(
+        val label: String,
+        val itemState: ItemState,
+        val updateTime: Long = 0L,
+        val rules: Int = 0
+    ) {
+        val done: Boolean get() = itemState == ItemState.DONE
+        val finished: Boolean
+            get() = itemState == ItemState.DONE || itemState == ItemState.FAILED || itemState == ItemState.NOT_STARTED
+    }
 
     data class Progress(
         val state: State,
@@ -29,6 +42,7 @@ class AdblockListDownloader(context: Context) {
     ) {
         val total: Int get() = lists.size
         val done: Int get() = lists.count { it.done }
+        val failed: Int get() = lists.count { it.itemState == ItemState.FAILED || it.itemState == ItemState.NOT_STARTED }
     }
 
     private val appContext = context.applicationContext
@@ -38,17 +52,23 @@ class AdblockListDownloader(context: Context) {
     private var callback: ((Progress) -> Unit)? = null
     private var configs: List<AdblockConfig> = emptyList()
     private var startedAt = 0L
+    private var lastMap: Map<String, Filter> = emptyMap()
     private var lastLists: List<ListStatus> = emptyList()
+
+    // Filters for which this run has been seen to queue or run work. A FAILED state only counts for these, because
+    // the state left over from an earlier run says nothing about this one.
+    private val started = HashSet<String>()
 
     val isRunning: Boolean get() = stopObserving != null
 
     private fun elapsedSeconds() = ((System.currentTimeMillis() - startedAt) / 1000).toInt()
 
-    // Re-reports every second so the screen can show that we are alive and waiting
+    // Re-evaluates every second, so the screen shows that we are alive and "didn't start" can be detected
     private val ticker = object : Runnable {
         override fun run() {
-            callback?.invoke(Progress(State.RUNNING, lastLists, elapsedSeconds()))
-            handler.postDelayed(this, 1000)
+            if (!isRunning) return
+            update(lastMap)
+            if (isRunning) handler.postDelayed(this, 1000)
         }
     }
 
@@ -77,6 +97,7 @@ class AdblockListDownloader(context: Context) {
         this.configs = configs
         this.callback = onProgress
         this.startedAt = System.currentTimeMillis()
+        this.started.clear()
 
         // Make sure every configured list exists, then force a fresh download of each
         val viewModel = adFilter.viewModel
@@ -87,12 +108,13 @@ class AdblockListDownloader(context: Context) {
             viewModel.download(filter.id)
         }
 
-        watch(viewModel.filters)
-
         Log.d(TAG, "started at $startedAt for ${configs.size} lists")
+        watch(viewModel.filters)
         update(viewModel.filters.value ?: emptyMap())
-        handler.postDelayed(ticker, 1000)
-        handler.postDelayed({ finish(State.TIMED_OUT, report = true) }, TIMEOUT_MS)
+        if (isRunning) {
+            handler.postDelayed(ticker, 1000)
+            handler.postDelayed({ finish(State.TIMED_OUT, report = true) }, TIMEOUT_MS)
+        }
     }
 
     /**
@@ -112,18 +134,41 @@ class AdblockListDownloader(context: Context) {
     }
 
     private fun update(map: Map<String, Filter>) {
+        lastMap = map
+        val elapsed = elapsedSeconds()
         lastLists = configs.map { config ->
             val filter = map.values.firstOrNull { it.url == config.value }
-            ListStatus(config.label, filter != null && filter.updateTime >= startedAt, filter?.updateTime ?: 0L)
+            ListStatus(config.label, itemStateOf(filter, elapsed), filter?.updateTime ?: 0L, filter?.filtersCount ?: 0)
         }
         Log.d(
-            TAG, "filters changed (startedAt=$startedAt): " +
-                map.values.joinToString { "${it.url} updateTime=${it.updateTime} hasDownloaded=${it.hasDownloaded()}" }
+            TAG, "elapsed=${elapsed}s startedAt=$startedAt: " +
+                map.values.joinToString { "${it.url} state=${it.downloadState} updateTime=${it.updateTime} rules=${it.filtersCount}" }
         )
-        if (lastLists.all { it.done }) {
-            finish(State.FINISHED, report = true)
+
+        if (lastLists.all { it.finished }) {
+            finish(if (lastLists.all { it.done }) State.FINISHED else State.FINISHED_WITH_ERRORS, report = true)
         } else {
-            callback?.invoke(Progress(State.RUNNING, lastLists, elapsedSeconds()))
+            callback?.invoke(Progress(State.RUNNING, lastLists, elapsed))
+        }
+    }
+
+    private fun itemStateOf(filter: Filter?, elapsed: Int): ItemState {
+        if (filter == null) return ItemState.WAITING
+
+        val libraryState = filter.downloadState
+        if (libraryState.isRunning) started.add(filter.id)
+
+        return when {
+            libraryState == DownloadState.SUCCESS && filter.updateTime >= startedAt -> ItemState.DONE
+            libraryState == DownloadState.DOWNLOADING -> ItemState.DOWNLOADING
+            libraryState == DownloadState.INSTALLING -> ItemState.INSTALLING
+            (libraryState == DownloadState.FAILED || libraryState == DownloadState.CANCELLED) &&
+                filter.id in started -> ItemState.FAILED
+            // queued, e.g. waiting for a network connection
+            filter.id in started -> ItemState.WAITING
+            // nothing was queued for this list: the library refused the request (a left-over download record)
+            elapsed >= NOT_STARTED_AFTER_SECONDS -> ItemState.NOT_STARTED
+            else -> ItemState.WAITING
         }
     }
 
@@ -142,5 +187,6 @@ class AdblockListDownloader(context: Context) {
     private companion object {
         const val TAG = "AdblockDL"
         const val TIMEOUT_MS = 3 * 60 * 1000L
+        const val NOT_STARTED_AFTER_SECONDS = 10
     }
 }
