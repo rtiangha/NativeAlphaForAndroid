@@ -3,6 +3,7 @@ package com.cylonid.nativealpha.helper
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.Observer
 import com.cylonid.nativealpha.model.AdblockConfig
@@ -19,9 +20,13 @@ class AdblockListDownloader(context: Context) {
 
     enum class State { RUNNING, FINISHED, TIMED_OUT, BUSY_ELSEWHERE, UNAVAILABLE, NOTHING_CONFIGURED }
 
-    data class ListStatus(val label: String, val done: Boolean)
+    data class ListStatus(val label: String, val done: Boolean, val updateTime: Long = 0L)
 
-    data class Progress(val state: State, val lists: List<ListStatus> = emptyList()) {
+    data class Progress(
+        val state: State,
+        val lists: List<ListStatus> = emptyList(),
+        val elapsedSeconds: Int = 0
+    ) {
         val total: Int get() = lists.size
         val done: Int get() = lists.count { it.done }
     }
@@ -36,6 +41,16 @@ class AdblockListDownloader(context: Context) {
     private var lastLists: List<ListStatus> = emptyList()
 
     val isRunning: Boolean get() = stopObserving != null
+
+    private fun elapsedSeconds() = ((System.currentTimeMillis() - startedAt) / 1000).toInt()
+
+    // Re-reports every second so the screen can show that we are alive and waiting
+    private val ticker = object : Runnable {
+        override fun run() {
+            callback?.invoke(Progress(State.RUNNING, lastLists, elapsedSeconds()))
+            handler.postDelayed(this, 1000)
+        }
+    }
 
     fun start(configs: List<AdblockConfig>, onProgress: (Progress) -> Unit) {
         if (isRunning) return
@@ -74,7 +89,9 @@ class AdblockListDownloader(context: Context) {
 
         watch(viewModel.filters)
 
+        Log.d(TAG, "started at $startedAt for ${configs.size} lists")
         update(viewModel.filters.value ?: emptyMap())
+        handler.postDelayed(ticker, 1000)
         handler.postDelayed({ finish(State.TIMED_OUT, report = true) }, TIMEOUT_MS)
     }
 
@@ -97,12 +114,16 @@ class AdblockListDownloader(context: Context) {
     private fun update(map: Map<String, Filter>) {
         lastLists = configs.map { config ->
             val filter = map.values.firstOrNull { it.url == config.value }
-            ListStatus(config.label, filter != null && filter.updateTime >= startedAt)
+            ListStatus(config.label, filter != null && filter.updateTime >= startedAt, filter?.updateTime ?: 0L)
         }
+        Log.d(
+            TAG, "filters changed (startedAt=$startedAt): " +
+                map.values.joinToString { "${it.url} updateTime=${it.updateTime} hasDownloaded=${it.hasDownloaded()}" }
+        )
         if (lastLists.all { it.done }) {
             finish(State.FINISHED, report = true)
         } else {
-            callback?.invoke(Progress(State.RUNNING, lastLists))
+            callback?.invoke(Progress(State.RUNNING, lastLists, elapsedSeconds()))
         }
     }
 
@@ -112,12 +133,14 @@ class AdblockListDownloader(context: Context) {
         stopObserving = null
         AdblockSyncLock.release()
 
+        Log.d(TAG, "finished with state $state after ${elapsedSeconds()}s")
         val cb = callback
         callback = null
-        if (report) cb?.invoke(Progress(state, lastLists))
+        if (report) cb?.invoke(Progress(state, lastLists, elapsedSeconds()))
     }
 
     private companion object {
+        const val TAG = "AdblockDL"
         const val TIMEOUT_MS = 3 * 60 * 1000L
     }
 }

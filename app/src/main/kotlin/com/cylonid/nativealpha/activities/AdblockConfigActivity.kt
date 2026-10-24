@@ -64,21 +64,37 @@ class AdblockConfigActivity : ToolbarBaseActivity<AdblockConfigActivityBinding>(
         binding.btnDownloadFilters.isEnabled = p.state != AdblockListDownloader.State.RUNNING
 
         binding.downloadProgress.visibility = if (p.lists.isEmpty()) View.GONE else View.VISIBLE
+        // Animated while nothing has finished yet, so a waiting download doesn't look like a frozen, empty bar
+        binding.downloadProgress.isIndeterminate = p.state == AdblockListDownloader.State.RUNNING && p.done == 0
         binding.downloadProgress.max = maxOf(p.total, 1)
         binding.downloadProgress.progress = p.done
 
         val summary = when (p.state) {
-            AdblockListDownloader.State.RUNNING -> getString(R.string.adblock_dl_running, p.done, p.total)
+            AdblockListDownloader.State.RUNNING -> getString(R.string.adblock_dl_running, p.done, p.total, p.elapsedSeconds)
             AdblockListDownloader.State.FINISHED -> getString(R.string.adblock_dl_finished, p.total)
             AdblockListDownloader.State.TIMED_OUT -> getString(R.string.adblock_dl_timeout, p.done, p.total)
             AdblockListDownloader.State.BUSY_ELSEWHERE -> getString(R.string.adblock_dl_busy)
             AdblockListDownloader.State.UNAVAILABLE -> getString(R.string.adblock_dl_unavailable)
             AdblockListDownloader.State.NOTHING_CONFIGURED -> getString(R.string.adblock_dl_none)
         }
-        val details = p.lists.joinToString("\n") { (if (it.done) "✓ " else "… ") + it.label }
+        val details = p.lists.joinToString("\n") { describe(it) }
 
         binding.downloadStatus.visibility = View.VISIBLE
         binding.downloadStatus.text = if (details.isEmpty()) summary else "$summary\n$details"
+    }
+
+    // The "last updated" time doubles as a diagnostic: it only moves when a list was really downloaded
+    private fun describe(item: AdblockListDownloader.ListStatus): String {
+        val age = if (item.updateTime <= 0L) {
+            getString(R.string.adblock_dl_never)
+        } else {
+            android.text.format.DateUtils.getRelativeTimeSpanString(
+                item.updateTime,
+                System.currentTimeMillis(),
+                android.text.format.DateUtils.SECOND_IN_MILLIS
+            ).toString()
+        }
+        return (if (item.done) "✓ " else "… ") + item.label + " · " + age
     }
 
     override fun onDestroy() {

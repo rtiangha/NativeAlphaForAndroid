@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="adblock_dl_button">Download filter lists</string>
-    <string name="adblock_dl_running">Downloading… %1$d of %2$d lists updated</string>
+    <string name="adblock_dl_running">Downloading… %1$d of %2$d lists updated (%3$d s)</string>
     <string name="adblock_dl_finished">All %1$d lists updated. Restart open web apps to use them.</string>
     <string name="adblock_dl_timeout">Timed out: %1$d of %2$d lists updated. A list server may be slow or down.</string>
     <string name="adblock_dl_busy">The filter lists are already being updated. Try again in a moment.</string>
     <string name="adblock_dl_unavailable">Adblock isn’t available right now.</string>
+    <string name="adblock_dl_never">never</string>
     <string name="adblock_dl_none">No filter lists are configured.</string>
 </resources>
