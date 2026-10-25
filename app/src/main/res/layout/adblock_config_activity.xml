@@ -48,6 +48,27 @@
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
                             android:text="@string/restore_standard_setting" />
+
+                        <Button
+                            android:id="@+id/btnDownloadFilters"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/adblock_dl_button" />
+
+                        <ProgressBar
+                            android:id="@+id/downloadProgress"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:indeterminate="false"
+                            android:visibility="gone" />
+
+                        <TextView
+                            android:id="@+id/downloadStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:textAppearance="@style/TextAppearance.AppCompat.Small"
+                            android:visibility="gone" />
                     </LinearLayout>
 
 
