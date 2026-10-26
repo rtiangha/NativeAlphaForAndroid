@@ -562,6 +562,18 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         return targetHost.equals(baseHost) || targetHost.endsWith("." + baseHost);
     }
 
+    /**
+     * Camera, microphone, location and DRM grants only apply to the web app's own site, not to embedded third-party
+     * content (ads, iframes) that happens to run in the same WebView.
+     */
+    private boolean isFromThisWebApp(Uri origin) {
+        String baseHost = Uri.parse(webapp.getBaseUrl()).getHost();
+        if (baseHost == null) {
+            return true; // nothing to compare with, e.g. a local file
+        }
+        return origin != null && isSameSite(origin.getHost(), baseHost);
+    }
+
     private static String stripTrailingSlash(String s) {
         return (s != null && s.endsWith("/")) ? s.substring(0, s.length() - 1) : s;
     }
@@ -934,6 +946,10 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
 
         @Override
         public void onPermissionRequest(PermissionRequest request) {
+            if (!isFromThisWebApp(request.getOrigin())) {
+                request.deny();
+                return;
+            }
             List<String> permissionsToGrant = new ArrayList<>();
 
             boolean containsDrmRequest = Arrays.asList(request.getResources()).contains(PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID);
@@ -974,6 +990,10 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         @Override
         public void onGeolocationPermissionsShowPrompt(final String origin,
                                                        final GeolocationPermissions.Callback callback) {
+            if (!isFromThisWebApp(Uri.parse(origin))) {
+                callback.invoke(origin, false, false);
+                return;
+            }
             mGeoPermissionRequestCallback = callback;
             mGeoPermissionRequestOrigin = origin;
             this.handlePermissionRequest("location", webapp.isAllowLocationAccess(), new String[]{Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION}, Const.PERMISSION_RC_LOCATION, Arrays.asList(new String[]{}), new String[]{}, () -> webapp.setAllowLocationAccess(true));

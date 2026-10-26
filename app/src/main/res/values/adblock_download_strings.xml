@@ -14,7 +14,8 @@
     <string name="adblock_dl_item_updated">updated</string>
     <string name="adblock_dl_item_failed">failed</string>
     <string name="adblock_dl_item_not_started">didn’t start</string>
-    <string name="adblock_dl_item_no_rules">0 rules loaded (list rejected or empty)</string>
+    <string name="adblock_dl_item_no_rules">0 rules loaded (list empty or unreadable)</string>
     <string name="adblock_dl_last_updated">last updated: %1$s</string>
+    <string name="adblock_url_https_only">Filter list URLs must use https://</string>
     <string name="adblock_dl_none">No filter lists are configured.</string>
 </resources>

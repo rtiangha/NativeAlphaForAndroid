@@ -24,7 +24,7 @@
         android:screenOrientation="portrait"
         android:usesCleartextTraffic="true"
         android:resizeableActivity="true"
-        android:fullBackupContent="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:enableOnBackInvokedCallback="true">
 
         <activity

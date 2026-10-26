@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Backups stay on, but WebView data is left out: it holds the login cookies, local storage and IndexedDB of every
+    web app. WebView keeps it in app_webview*/ directories in the "root" domain (one per sandbox/web app, with
+    names that are generated at runtime, so they cannot be listed here).
+
+    <include> rules work as an allow list: once any include exists, only the domains and paths included below are
+    backed up, so every app_webview*/ directory (and anything else under "root") is left out.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="sharedpref" path="." />
+        <include domain="database" path="." />
+        <include domain="file" path="." />
+
+        <!-- Older WebView storage locations, in case a device still has them -->
+        <exclude domain="database" path="webview.db" />
+        <exclude domain="database" path="webviewCache.db" />
+        <exclude domain="database" path="webviewCookiesChromium.db" />
+        <exclude domain="database" path="webviewCookiesChromiumPrivate.db" />
+        <!-- Lock file used while downloading filter lists -->
+        <exclude domain="file" path="adblock_sync.lock" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="sharedpref" path="." />
+        <include domain="database" path="." />
+        <include domain="file" path="." />
+
+        <exclude domain="database" path="webview.db" />
+        <exclude domain="database" path="webviewCache.db" />
+        <exclude domain="database" path="webviewCookiesChromium.db" />
+        <exclude domain="database" path="webviewCookiesChromiumPrivate.db" />
+        <exclude domain="file" path="adblock_sync.lock" />
+    </device-transfer>
+</data-extraction-rules>

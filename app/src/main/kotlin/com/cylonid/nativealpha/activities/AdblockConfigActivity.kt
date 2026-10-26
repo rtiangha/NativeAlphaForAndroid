@@ -133,8 +133,11 @@ class AdblockConfigActivity : ToolbarBaseActivity<AdblockConfigActivityBinding>(
 
                 val url = localBinding.addAdblockUrl.text.toString().trim()
 
-                val formattedUrl =
-                    if (url.startsWith("https://") || url.startsWith("http://")) url else "https://$url"
+                if (url.startsWith("http://", ignoreCase = true)) {
+                    NotificationUtils.showToast(this, getString(R.string.adblock_url_https_only))
+                    return@setPositiveButton
+                }
+                val formattedUrl = if (url.startsWith("https://", ignoreCase = true)) url else "https://$url"
 
                 val urlAlreadyExists = DataManager.getInstance().settings.globalWebApp.adBlockSettings.any { it.value == formattedUrl}
                 if(urlAlreadyExists) {
