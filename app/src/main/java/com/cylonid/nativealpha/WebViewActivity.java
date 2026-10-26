@@ -571,7 +571,44 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         if (baseHost == null) {
             return true; // nothing to compare with, e.g. a local file
         }
-        return origin != null && isSameSite(origin.getHost(), baseHost);
+        if (origin == null || origin.getHost() == null) {
+            return false;
+        }
+        // Same base domain, any subdomain: www.example.com and meet.example.com are both "example.com"
+        return baseDomainOf(origin.getHost()).equals(baseDomainOf(baseHost));
+    }
+
+    // Second-level labels used under two-letter country domains (example.co.uk, example.com.au)
+    private static final java.util.Set<String> SECOND_LEVEL_LABELS = java.util.Set.of(
+            "co", "com", "org", "net", "gov", "edu", "ac", "or", "ne", "go", "mil", "nom", "sch", "ltd", "plc");
+
+    // Hosting services whose subdomains belong to different owners (foo.github.io is not bar.github.io)
+    private static final java.util.Set<String> MULTI_TENANT_SUFFIXES = java.util.Set.of(
+            "github.io", "gitlab.io", "blogspot.com", "herokuapp.com", "netlify.app", "vercel.app", "pages.dev",
+            "workers.dev", "web.app", "firebaseapp.com", "appspot.com", "azurewebsites.net", "cloudfront.net",
+            "wordpress.com", "tumblr.com", "weebly.com", "wixsite.com", "myshopify.com", "fly.dev", "onrender.com",
+            "glitch.me", "repl.co");
+
+    /**
+     * Best-effort "base domain" (example.com, example.co.uk) without a public suffix list, which Android doesn't
+     * provide. IP addresses and single-label hosts only match themselves.
+     */
+    private static String baseDomainOf(String host) {
+        String h = host.toLowerCase(java.util.Locale.ROOT);
+        if (h.indexOf(':') >= 0 || h.indexOf('.') < 0 || h.matches("[0-9.]+")) {
+            return h;
+        }
+        String[] labels = h.split("\\.");
+        int n = labels.length;
+        if (n <= 2) {
+            return h;
+        }
+        int keep = 2;
+        if (MULTI_TENANT_SUFFIXES.contains(labels[n - 2] + "." + labels[n - 1])
+                || (labels[n - 1].length() == 2 && SECOND_LEVEL_LABELS.contains(labels[n - 2]))) {
+            keep = 3;
+        }
+        return String.join(".", Arrays.asList(labels).subList(n - keep, n));
     }
 
     private static String stripTrailingSlash(String s) {
@@ -793,6 +830,11 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
     public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
 
+        if (requestCode == Const.PERMISSION_CAMERA || requestCode == Const.PERMISSION_AUDIO) {
+            handleWebPermissionResult(requestCode);
+            return;
+        }
+
         // Forward results to EasyPermissions
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this);
     }
@@ -808,14 +850,202 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         wv.reload();
     }
 
+    // ---- Camera / microphone / DRM requests from web pages ---------------------------------------------------------
+    // A request is only answered once the user (and, if needed, Android) has decided for every resource it asks for,
+    // so the page gets its permission right away and the page doesn't need to be reloaded.
+
+    private static final List<String> SUPPORTED_WEB_RESOURCES = Arrays.asList(
+            PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID,
+            PermissionRequest.RESOURCE_VIDEO_CAPTURE,
+            PermissionRequest.RESOURCE_AUDIO_CAPTURE);
+
+    private final java.util.ArrayDeque<PermissionRequest> queuedWebRequests = new java.util.ArrayDeque<>();
+    private final java.util.ArrayDeque<String> pendingWebResources = new java.util.ArrayDeque<>();
+    private final List<String> grantedWebResources = new ArrayList<>();
+    private PermissionRequest pendingWebRequest = null;
+    private String awaitedAndroidResource = null; // waiting for the result of Android's own permission dialog
+    private AlertDialog pendingWebDialog = null;
+
+    private void queueWebPermissionRequest(PermissionRequest request) {
+        queuedWebRequests.add(request);
+        if (pendingWebRequest == null) {
+            startNextWebPermissionRequest();
+        }
+    }
+
+    private void startNextWebPermissionRequest() {
+        PermissionRequest next = queuedWebRequests.poll();
+        if (next == null) {
+            return;
+        }
+        pendingWebRequest = next;
+        grantedWebResources.clear();
+        pendingWebResources.clear();
+        for (String resource : next.getResources()) {
+            if (SUPPORTED_WEB_RESOURCES.contains(resource)) {
+                pendingWebResources.add(resource);
+            }
+        }
+        decideNextWebResource();
+    }
+
+    private void decideNextWebResource() {
+        if (pendingWebRequest == null) {
+            return;
+        }
+        String resource = pendingWebResources.poll();
+        if (resource == null) {
+            finishWebPermissionRequest();
+        } else if (isWebResourceAllowedByUser(resource)) {
+            grantOrRequestAndroidPermission(resource);
+        } else {
+            askUserAboutWebResource(resource);
+        }
+    }
+
+    private void finishWebPermissionRequest() {
+        PermissionRequest request = pendingWebRequest;
+        pendingWebRequest = null;
+        awaitedAndroidResource = null;
+        if (request != null) {
+            if (grantedWebResources.isEmpty()) {
+                request.deny();
+            } else {
+                request.grant(grantedWebResources.toArray(new String[0]));
+            }
+        }
+        grantedWebResources.clear();
+        startNextWebPermissionRequest();
+    }
+
+    private void cancelWebPermissionRequest(PermissionRequest request) {
+        if (queuedWebRequests.remove(request) || request != pendingWebRequest) {
+            return;
+        }
+        if (pendingWebDialog != null) {
+            pendingWebDialog.dismiss();
+            pendingWebDialog = null;
+        }
+        pendingWebRequest = null;
+        awaitedAndroidResource = null;
+        pendingWebResources.clear();
+        grantedWebResources.clear();
+        startNextWebPermissionRequest();
+    }
+
+    private void askUserAboutWebResource(String resource) {
+        String name = webResourceName(resource);
+        pendingWebDialog = new AlertDialog.Builder(this)
+                .setTitle(permissionDialogString(name, "_title"))
+                .setMessage(permissionDialogString(name, "_txt"))
+                .setPositiveButton(android.R.string.yes, (dialog, id) -> {
+                    pendingWebDialog = null;
+                    rememberWebResourceChoice(resource);
+                    grantOrRequestAndroidPermission(resource);
+                })
+                .setNegativeButton(android.R.string.no, (dialog, id) -> {
+                    pendingWebDialog = null;
+                    decideNextWebResource();
+                })
+                .setOnCancelListener(dialog -> {
+                    pendingWebDialog = null;
+                    decideNextWebResource();
+                })
+                .create();
+        pendingWebDialog.show();
+    }
+
+    private void grantOrRequestAndroidPermission(String resource) {
+        String[] androidPermissions = androidPermissionsFor(resource);
+        if (androidPermissions.length == 0 || EasyPermissions.hasPermissions(this, androidPermissions)) {
+            grantedWebResources.add(resource);
+            decideNextWebResource();
+        } else {
+            awaitedAndroidResource = resource;
+            ActivityCompat.requestPermissions(this, androidPermissions, requestCodeFor(resource));
+        }
+    }
+
+    private void handleWebPermissionResult(int requestCode) {
+        String resource = awaitedAndroidResource;
+        if (resource == null || requestCode != requestCodeFor(resource)) {
+            return;
+        }
+        awaitedAndroidResource = null;
+        if (EasyPermissions.hasPermissions(this, androidPermissionsFor(resource))) {
+            grantedWebResources.add(resource);
+        }
+        decideNextWebResource();
+    }
+
+    private boolean isWebResourceAllowedByUser(String resource) {
+        switch (resource) {
+            case PermissionRequest.RESOURCE_VIDEO_CAPTURE:
+                return webapp.isCameraPermission();
+            case PermissionRequest.RESOURCE_AUDIO_CAPTURE:
+                return webapp.isMicrophonePermission();
+            default:
+                return webapp.isDrmAllowed();
+        }
+    }
+
+    private void rememberWebResourceChoice(String resource) {
+        webapp.setOverrideGlobalSettings(true);
+        switch (resource) {
+            case PermissionRequest.RESOURCE_VIDEO_CAPTURE:
+                webapp.setCameraPermission(true);
+                break;
+            case PermissionRequest.RESOURCE_AUDIO_CAPTURE:
+                webapp.setMicrophonePermission(true);
+                break;
+            default:
+                webapp.setDrmAllowed(true);
+        }
+        DataManager.getInstance().replaceWebApp(webapp);
+    }
+
+    private String[] androidPermissionsFor(String resource) {
+        switch (resource) {
+            case PermissionRequest.RESOURCE_VIDEO_CAPTURE:
+                return new String[]{Manifest.permission.CAMERA};
+            case PermissionRequest.RESOURCE_AUDIO_CAPTURE:
+                return new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS};
+            default:
+                return new String[]{};
+        }
+    }
+
+    private int requestCodeFor(String resource) {
+        switch (resource) {
+            case PermissionRequest.RESOURCE_VIDEO_CAPTURE:
+                return Const.PERMISSION_CAMERA;
+            case PermissionRequest.RESOURCE_AUDIO_CAPTURE:
+                return Const.PERMISSION_AUDIO;
+            default:
+                return -1;
+        }
+    }
+
+    private String webResourceName(String resource) {
+        switch (resource) {
+            case PermissionRequest.RESOURCE_VIDEO_CAPTURE:
+                return "camera";
+            case PermissionRequest.RESOURCE_AUDIO_CAPTURE:
+                return "microphone";
+            default:
+                return "drm";
+        }
+    }
+
+    private String permissionDialogString(String name, String suffix) {
+        return getString(getResources().getIdentifier("dialog_permission_" + name + suffix, "string", getPackageName()));
+    }
+
     @Override
     public void onPermissionsGranted(int requestCode, @NonNull List<String> list) {
         if (requestCode == Const.PERMISSION_RC_LOCATION) {
             enablePermissionBoolOnWebApp(() -> webapp.setAllowLocationAccess(true));
             this.handleGeoPermissionCallback(true);
-        }
-        if (requestCode == Const.PERMISSION_CAMERA) {
-            enablePermissionBoolOnWebApp(() -> webapp.setCameraPermission(true));
         }
         if (requestCode == Const.PERMISSION_RC_STORAGE) {
             if (dl_request != null) {
@@ -950,24 +1180,12 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
                 request.deny();
                 return;
             }
-            List<String> permissionsToGrant = new ArrayList<>();
+            queueWebPermissionRequest(request);
+        }
 
-            boolean containsDrmRequest = Arrays.asList(request.getResources()).contains(PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID);
-            boolean containsCameraRequest = Arrays.asList(request.getResources()).contains(PermissionRequest.RESOURCE_VIDEO_CAPTURE);
-            boolean containsMicrophoneRequest = Arrays.asList(request.getResources()).contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE);
-
-            if (containsDrmRequest) {
-                this.handlePermissionRequest("drm", webapp.isDrmAllowed(), new String[]{}, -1, permissionsToGrant, new String[]{PermissionRequest.RESOURCE_PROTECTED_MEDIA_ID}, () -> webapp.setDrmAllowed(true));
-            }
-            if (containsCameraRequest) {
-                this.handlePermissionRequest("camera", webapp.isCameraPermission(), new String[]{Manifest.permission.CAMERA}, Const.PERMISSION_CAMERA, permissionsToGrant, new String[]{PermissionRequest.RESOURCE_VIDEO_CAPTURE}, () -> webapp.setCameraPermission(true));
-            }
-
-            if (containsMicrophoneRequest) {
-                this.handlePermissionRequest("microphone", webapp.isMicrophonePermission(), new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.MODIFY_AUDIO_SETTINGS}, Const.PERMISSION_AUDIO, permissionsToGrant, new String[]{PermissionRequest.RESOURCE_AUDIO_CAPTURE}, () -> webapp.setMicrophonePermission(true));
-            }
-
-            request.grant(permissionsToGrant.toArray(new String[0]));
+        @Override
+        public void onPermissionRequestCanceled(PermissionRequest request) {
+            cancelWebPermissionRequest(request);
         }
 
 
