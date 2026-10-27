@@ -9,15 +9,29 @@ import androidx.biometric.BiometricPrompt.PromptInfo
 import com.cylonid.nativealpha.R
 import com.cylonid.nativealpha.util.NotificationUtils
 import com.cylonid.nativealpha.util.Utility
-import com.google.android.material.snackbar.Snackbar
 
 internal class BiometricPromptHelper(private val activity: FragmentActivity) {
     private val allowedAuthenticators =
         BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL
 
-    fun showPrompt(funSuccess: BiometricPromptCallback, funFail: BiometricPromptCallback, promptTitle: String) {
-        val supported = isBiometricsSupported(activity);
-        if(!supported) return;
+    /**
+     * @param funFail called when authentication failed or was cancelled by the user, and also when no biometric or
+     * screen lock is available at all (the caller must not be left waiting for a result that never comes)
+     * @param funInterrupted called when the system cancelled the prompt, e.g. because the app went to the background;
+     * the user did not decide anything
+     */
+    @JvmOverloads
+    fun showPrompt(
+        funSuccess: BiometricPromptCallback,
+        funFail: BiometricPromptCallback,
+        promptTitle: String,
+        funInterrupted: BiometricPromptCallback = BiometricPromptCallback {}
+    ) {
+        val supported = isBiometricsSupported(activity)
+        if (!supported) {
+            funFail.execute()
+            return
+        }
         val executor = ContextCompat.getMainExecutor(activity)
         val biometricPrompt = BiometricPrompt(
             activity,
@@ -27,7 +41,11 @@ internal class BiometricPromptHelper(private val activity: FragmentActivity) {
                     errString: CharSequence
                 ) {
                     super.onAuthenticationError(errorCode, errString)
-                    funFail.execute()
+                    if (errorCode == BiometricPrompt.ERROR_CANCELED) {
+                        funInterrupted.execute()
+                    } else {
+                        funFail.execute()
+                    }
                 }
 
                 override fun onAuthenticationSucceeded(
@@ -53,10 +71,10 @@ internal class BiometricPromptHelper(private val activity: FragmentActivity) {
                 isSupported = true
             }
             BiometricManager.BIOMETRIC_ERROR_NONE_ENROLLED -> {
-                NotificationUtils.showInfoSnackbar(activity, activity.getString(R.string.no_biometric_keys_enrolled), Snackbar.LENGTH_LONG);
+                NotificationUtils.showToast(activity, activity.getString(R.string.no_biometric_keys_enrolled))
             }
             else -> {
-                NotificationUtils.showInfoSnackbar(activity, activity.getString(R.string.no_biometric_devices), Snackbar.LENGTH_LONG);
+                NotificationUtils.showToast(activity, activity.getString(R.string.no_biometric_devices))
             }
         }
         return isSupported
