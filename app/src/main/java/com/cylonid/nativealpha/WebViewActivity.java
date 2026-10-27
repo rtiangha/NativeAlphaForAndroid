@@ -567,12 +567,9 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         this.setDarkModeIfNeeded();
     }
 
-    /** True if targetHost is baseHost or a subdomain of it (exact label match, not substring). */
-    private static boolean isSameSite(String targetHost, String baseHost) {
-        if (targetHost == null || baseHost == null) return false;
-        targetHost = targetHost.toLowerCase(java.util.Locale.ROOT);
-        baseHost = baseHost.toLowerCase(java.util.Locale.ROOT);
-        return targetHost.equals(baseHost) || targetHost.endsWith("." + baseHost);
+    /** True if both hosts have the same base domain: www.example.com, cdn.example.com and example.com all match. */
+    private static boolean isSameBaseDomain(String targetHost, String baseHost) {
+        return targetHost != null && baseHost != null && baseDomainOf(targetHost).equals(baseDomainOf(baseHost));
     }
 
     /**
@@ -584,11 +581,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         if (baseHost == null) {
             return true; // nothing to compare with, e.g. a local file
         }
-        if (origin == null || origin.getHost() == null) {
-            return false;
-        }
-        // Same base domain, any subdomain: www.example.com and meet.example.com are both "example.com"
-        return baseDomainOf(origin.getHost()).equals(baseDomainOf(baseHost));
+        return origin != null && isSameBaseDomain(origin.getHost(), baseHost);
     }
 
     /**
@@ -598,10 +591,23 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
      */
     private static String baseDomainOf(String host) {
         String h = host.toLowerCase(java.util.Locale.ROOT);
+        String cached = BASE_DOMAIN_CACHE.get(h);
+        if (cached != null) {
+            return cached;
+        }
         okhttp3.HttpUrl url = okhttp3.HttpUrl.parse("https://" + h);
         String base = url != null ? url.topPrivateDomain() : null;
-        return base != null ? base : h;
+        String result = base != null ? base : h;
+        if (BASE_DOMAIN_CACHE.size() > 1000) {
+            BASE_DOMAIN_CACHE.clear();
+        }
+        BASE_DOMAIN_CACHE.put(h, result);
+        return result;
     }
+
+    // Looked up from many threads (every request of a page asks for it), so keep the answers
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> BASE_DOMAIN_CACHE =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     private static String stripTrailingSlash(String s) {
         return (s != null && s.endsWith("/")) ? s.substring(0, s.length() - 1) : s;
@@ -1326,7 +1332,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
                 Uri webapp_uri = Uri.parse(webapp.getBaseUrl());
 
                 if (uri.getHost() != null && webapp_uri.getHost() != null) {
-                    if (!isSameSite(uri.getHost(), webapp_uri.getHost())) {
+                    if (!isSameBaseDomain(uri.getHost(), webapp_uri.getHost())) {
                         return new WebResourceResponse("text/plain", "utf-8", null);
                     }
                 }
@@ -1413,7 +1419,7 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
                 String base_url = webapp.getBaseUrl();
                 Uri uri = Uri.parse(base_url);
                 String host = uri.getHost();
-                if (host != null && !isSameSite(Uri.parse(url).getHost(), host)) {
+                if (host != null && !isSameBaseDomain(Uri.parse(url).getHost(), host)) {
                     view.getContext().startActivity(
                             new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
                     return true;
