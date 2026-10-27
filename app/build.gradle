@@ -119,6 +119,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
     implementation "androidx.biometric:biometric:1.1.0"
     implementation 'com.ernestoyaquello.dragdropswiperecyclerview:drag-drop-swipe-recyclerview:1.2.0'
+    implementation "com.squareup.okhttp3:okhttp:5.5.1"
     implementation "androidx.fragment:fragment-ktx:1.9.1"
     implementation('com.github.rtiangha.AdblockAndroid:ad-filter:c1b93c10f1') {
         exclude group: 'org.jetbrains.anko'

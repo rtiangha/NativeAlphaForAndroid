@@ -591,37 +591,16 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         return baseDomainOf(origin.getHost()).equals(baseDomainOf(baseHost));
     }
 
-    // Second-level labels used under two-letter country domains (example.co.uk, example.com.au)
-    private static final java.util.Set<String> SECOND_LEVEL_LABELS = java.util.Set.of(
-            "co", "com", "org", "net", "gov", "edu", "ac", "or", "ne", "go", "mil", "nom", "sch", "ltd", "plc");
-
-    // Hosting services whose subdomains belong to different owners (foo.github.io is not bar.github.io)
-    private static final java.util.Set<String> MULTI_TENANT_SUFFIXES = java.util.Set.of(
-            "github.io", "gitlab.io", "blogspot.com", "herokuapp.com", "netlify.app", "vercel.app", "pages.dev",
-            "workers.dev", "web.app", "firebaseapp.com", "appspot.com", "azurewebsites.net", "cloudfront.net",
-            "wordpress.com", "tumblr.com", "weebly.com", "wixsite.com", "myshopify.com", "fly.dev", "onrender.com",
-            "glitch.me", "repl.co");
-
     /**
-     * Best-effort "base domain" (example.com, example.co.uk) without a public suffix list, which Android doesn't
-     * provide. IP addresses and single-label hosts only match themselves.
+     * The registrable ("base") domain of a host, e.g. example.com or example.co.uk, taken from the public suffix list
+     * that OkHttp bundles. IP addresses, single-label hosts such as localhost, and hosts that are themselves a public
+     * suffix only match themselves.
      */
     private static String baseDomainOf(String host) {
         String h = host.toLowerCase(java.util.Locale.ROOT);
-        if (h.indexOf(':') >= 0 || h.indexOf('.') < 0 || h.matches("[0-9.]+")) {
-            return h;
-        }
-        String[] labels = h.split("\\.");
-        int n = labels.length;
-        if (n <= 2) {
-            return h;
-        }
-        int keep = 2;
-        if (MULTI_TENANT_SUFFIXES.contains(labels[n - 2] + "." + labels[n - 1])
-                || (labels[n - 1].length() == 2 && SECOND_LEVEL_LABELS.contains(labels[n - 2]))) {
-            keep = 3;
-        }
-        return String.join(".", Arrays.asList(labels).subList(n - keep, n));
+        okhttp3.HttpUrl url = okhttp3.HttpUrl.parse("https://" + h);
+        String base = url != null ? url.topPrivateDomain() : null;
+        return base != null ? base : h;
     }
 
     private static String stripTrailingSlash(String s) {
