@@ -104,6 +104,12 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
     private boolean currently_reloading = true;
     private GeolocationPermissions.Callback mGeoPermissionRequestCallback = null;
     private String mGeoPermissionRequestOrigin = null;
+
+    // Biometric lock: while locked, the page is neither visible nor running (it isn't even loaded the first time)
+    private boolean locked = false;
+    private boolean authInProgress = false;
+    private int authGeneration = 0; // answers from a prompt that was replaced or abandoned are ignored
+    private String pendingInitialUrl = null;
     private DownloadManager.Request dl_request = null;
     private Map<String, String> CUSTOM_HEADERS;
     protected ValueCallback<Uri[]> filePathCallback;
@@ -151,8 +157,8 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             // Toast is shown in getWebApp method
             finish();
         } else {
-            // Biometric protection is enforced in onResume(), which hides the view until
-            // authentication succeeds (it also runs right after onCreate()).
+            // The content stays hidden, paused and unloaded until the user has authenticated (see onResume())
+            locked = webapp.isBiometricProtection();
             setupWebView();
         }
     }
@@ -183,6 +189,9 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         }
 
         setContentView(R.layout.full_webview);
+        if (locked) {
+            hideContent();
+        }
 
         if(webapp.isKeepAwake()) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -282,7 +291,11 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         }
 
         CUSTOM_HEADERS = initCustomHeaders(webapp.isSendSavedataRequest());
-        loadURL(wv, url);
+        if (locked) {
+            pendingInitialUrl = url; // loaded once the user has authenticated, so nothing runs behind the lock
+        } else {
+            loadURL(wv, url);
+        }
         wv.setWebChromeClient(new CustomWebChromeClient());
         wv.setOnLongClickListener(view -> {
             if(webapp.getAlwaysUseFallbackContextMenu()) return false;
@@ -674,21 +687,71 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
             WebViewLauncher.startWebViewInNewProcess(new_webapp, this, launchedFromApp);
         }
 
-        wv.onResume();
-        wv.resumeTimers();
         this.setDarkModeIfNeeded();
 
-
-        if(webapp.isBiometricProtection()) {
-            View fullActivityView = findViewById(R.id.webviewActivity);
-            fullActivityView.setVisibility(View.GONE);
-            new BiometricPromptHelper(WebViewActivity.this).showPrompt(() -> fullActivityView.setVisibility(View.VISIBLE), () -> finish(), getString(R.string.bioprompt_restricted_webapp));
+        if (locked) {
+            hideContent();
+            // onResume also runs after dialogs and permission prompts: never start a second prompt while one is up
+            if (!authInProgress && !isFinishing()) {
+                showBiometricPrompt();
+            }
+        } else {
+            resumeContent();
         }
+    }
+
+    private void resumeContent() {
+        wv.onResume();
+        wv.resumeTimers();
         if (webapp.isAutoreload()) {
             reload_handler = new Handler(android.os.Looper.getMainLooper());
             reload();
         }
+    }
 
+    private void hideContent() {
+        View content = findViewById(R.id.webviewActivity);
+        if (content != null) {
+            content.setVisibility(View.GONE);
+        }
+    }
+
+    private void showBiometricPrompt() {
+        final int generation = ++authGeneration;
+        authInProgress = true;
+        new BiometricPromptHelper(this).showPrompt(
+                () -> {
+                    if (generation == authGeneration) {
+                        onUnlocked();
+                    }
+                },
+                () -> {
+                    if (generation == authGeneration) {
+                        authInProgress = false;
+                        finish();
+                    }
+                },
+                getString(R.string.bioprompt_restricted_webapp),
+                () -> {
+                    // The system cancelled the prompt (e.g. the app went to the background): stay locked, ask again later
+                    if (generation == authGeneration) {
+                        authInProgress = false;
+                    }
+                });
+    }
+
+    private void onUnlocked() {
+        authInProgress = false;
+        locked = false;
+        View content = findViewById(R.id.webviewActivity);
+        if (content != null) {
+            content.setVisibility(View.VISIBLE);
+        }
+        resumeContent();
+        if (pendingInitialUrl != null) {
+            loadURL(wv, pendingInitialUrl);
+            pendingInitialUrl = null;
+        }
     }
 
     @Override
@@ -716,6 +779,14 @@ public class WebViewActivity extends AppCompatActivity implements EasyPermission
         // would be reported as an adblock crash on the next launch.
         if (adblockLifecycleHelper != null) {
             adblockLifecycleHelper.afterAdblockOperation();
+        }
+        if (webapp != null && webapp.isBiometricProtection()) {
+            // Lock again whenever the app leaves the screen (home, app switcher, screen off) and hide the content
+            // right away, so nothing flashes up when the user comes back before authenticating
+            locked = true;
+            authInProgress = false;
+            authGeneration++;
+            hideContent();
         }
     }
 
