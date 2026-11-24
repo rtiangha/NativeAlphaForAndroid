@@ -7,7 +7,11 @@ android {
     dependenciesInfo {
         includeInApk = false
     }
-    compileSdk = 37
+    compileSdk {
+        version = release(37) {
+            minorApiLevel = 1
+        }
+    }
     splits {
         abi {
             enable = true
